@@ -1,0 +1,75 @@
+{
+  "summary": {
+    "dataset": "gold_RRL_interpolate",
+    "source_last_date": "2025-04-30",
+    "generated_last_date": "2026-05-08",
+    "future_rows": 267,
+    "expected_future_rows": 267,
+    "duplicate_dates": 0,
+    "null_cells": 0,
+    "avg_vol_ratio": 1.001878,
+    "max_vol_ratio_gap": 0.001878,
+    "avg_mean_gap_abs": 0.0,
+    "avg_ks_statistic": 0.205009,
+    "max_ks_statistic": 0.43138,
+    "avg_acf_gap_lag1": 0.152296,
+    "max_acf_gap_lag1": 0.508316,
+    "corr_matrix_mae": 0.290898,
+    "corr_matrix_max_gap": 0.741295,
+    "share_features_vol_ratio_pass_0p8_to_1p2": 1.0,
+    "share_features_ks_pvalue_gt_0p05": 0.0,
+    "share_features_acf_gap_lag1_lt_0p15": 0.75
+  },
+  "top_correlation_gaps": [
+    {
+      "feature_a": "UST10Y_Treasury_Yield",
+      "feature_b": "gepu",
+      "abs_corr_gap": 0.7412952881765645
+    },
+    {
+      "feature_a": "Gold_Futures",
+      "feature_b": "gpr_daily",
+      "abs_corr_gap": 0.5663932536173198
+    },
+    {
+      "feature_a": "Silver_Futures",
+      "feature_b": "gpr_daily",
+      "abs_corr_gap": 0.5521226415190102
+    },
+    {
+      "feature_a": "Crude_Oil_Futures",
+      "feature_b": "gepu",
+      "abs_corr_gap": 0.5009453744253919
+    },
+    {
+      "feature_a": "Crude_Oil_Futures",
+      "feature_b": "UST10Y_Treasury_Yield",
+      "abs_corr_gap": 0.48701221355214547
+    },
+    {
+      "feature_a": "Employment_Pop_Ratio",
+      "feature_b": "gpr_daily",
+      "abs_corr_gap": 0.4756316800750401
+    },
+    {
+      "feature_a": "Employment_Pop_Ratio",
+      "feature_b": "UST10Y_Treasury_Yield",
+      "abs_corr_gap": 0.4236540247388896
+    },
+    {
+      "feature_a": "Crude_Oil_Futures",
+      "feature_b": "Silver_Futures",
+      "abs_corr_gap": 0.3856776772876315
+    },
+    {
+      "feature_a": "Crude_Oil_Futures",
+      "feature_b": "Gold_Futures",
+      "abs_corr_gap": 0.3302652500796033
+    },
+    {
+      "feature_a": "Silver_Futures",
+      "feature_b": "UST10Y_Treasury_Yield",
+      "abs_corr_gap": 0.3269258317596021
+    }
+  ]
+}

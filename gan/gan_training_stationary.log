@@ -320,3 +320,85 @@
 2026-04-08 10:12:05,240 - INFO - Starting training loop...
 2026-04-08 10:12:05,240 - INFO - Training config: batch_size=384, epochs=40, n_critic=2, amp=True, workers=0, candidates=12, seeds=[0], gen_hidden=96, disc_hidden=96, gen_dropout=0.1862398828949981, lr_g=0.0004778004193421508, lr_d=0.0004706757138153239
 2026-04-08 10:12:05,240 - INFO - --- Training seed 0 for silver_RRL_interpolate.csv ---
+2026-04-08 10:12:18,551 - INFO - Calibrated Silver_Futures: raw_mean=0.000482, raw_std=0.003700, target_mean=0.000257, target_std=0.018269
+2026-04-08 10:12:18,551 - INFO - Calibrated Gold_Futures: raw_mean=0.000154, raw_std=0.001808, target_mean=0.000397, target_std=0.009483
+2026-04-08 10:12:18,551 - INFO - Calibrated US30: raw_mean=0.000510, raw_std=0.001960, target_mean=0.000328, target_std=0.011290
+2026-04-08 10:12:18,551 - INFO - Calibrated SnP500: raw_mean=0.000595, raw_std=0.002172, target_mean=0.000391, target_std=0.011551
+2026-04-08 10:12:18,551 - INFO - Calibrated NASDAQ_100: raw_mean=0.000715, raw_std=0.002636, target_mean=0.000594, target_std=0.014292
+2026-04-08 10:12:18,551 - INFO - Calibrated USD_index: raw_mean=0.021614, raw_std=0.084578, target_mean=0.000578, target_std=0.433643
+2026-04-08 10:12:18,865 - INFO - Calibrated Silver_Futures: raw_mean=0.000420, raw_std=0.003407, target_mean=0.000257, target_std=0.018269
+2026-04-08 10:12:18,865 - INFO - Calibrated Gold_Futures: raw_mean=0.000100, raw_std=0.001596, target_mean=0.000397, target_std=0.009483
+2026-04-08 10:12:18,865 - INFO - Calibrated US30: raw_mean=0.000537, raw_std=0.001730, target_mean=0.000328, target_std=0.011290
+2026-04-08 10:12:18,865 - INFO - Calibrated SnP500: raw_mean=0.000598, raw_std=0.001948, target_mean=0.000391, target_std=0.011551
+2026-04-08 10:12:18,865 - INFO - Calibrated NASDAQ_100: raw_mean=0.000732, raw_std=0.002361, target_mean=0.000594, target_std=0.014292
+2026-04-08 10:12:18,865 - INFO - Calibrated USD_index: raw_mean=0.025267, raw_std=0.081027, target_mean=0.000578, target_std=0.433643
+2026-04-08 10:12:19,185 - INFO - Calibrated Silver_Futures: raw_mean=0.000179, raw_std=0.003805, target_mean=0.000257, target_std=0.018269
+2026-04-08 10:12:19,185 - INFO - Calibrated Gold_Futures: raw_mean=-0.000010, raw_std=0.001752, target_mean=0.000397, target_std=0.009483
+2026-04-08 10:12:19,186 - INFO - Calibrated US30: raw_mean=0.000624, raw_std=0.001806, target_mean=0.000328, target_std=0.011290
+2026-04-08 10:12:19,186 - INFO - Calibrated SnP500: raw_mean=0.000660, raw_std=0.002028, target_mean=0.000391, target_std=0.011551
+2026-04-08 10:12:19,186 - INFO - Calibrated NASDAQ_100: raw_mean=0.000851, raw_std=0.002435, target_mean=0.000594, target_std=0.014292
+2026-04-08 10:12:19,186 - INFO - Calibrated USD_index: raw_mean=0.031660, raw_std=0.086498, target_mean=0.000578, target_std=0.433643
+2026-04-08 10:12:19,485 - INFO - Calibrated Silver_Futures: raw_mean=0.000469, raw_std=0.003936, target_mean=0.000257, target_std=0.018269
+2026-04-08 10:12:19,486 - INFO - Calibrated Gold_Futures: raw_mean=0.000197, raw_std=0.001862, target_mean=0.000397, target_std=0.009483
+2026-04-08 10:12:19,486 - INFO - Calibrated US30: raw_mean=0.000608, raw_std=0.001872, target_mean=0.000328, target_std=0.011290
+2026-04-08 10:12:19,486 - INFO - Calibrated SnP500: raw_mean=0.000680, raw_std=0.002126, target_mean=0.000391, target_std=0.011551
+2026-04-08 10:12:19,486 - INFO - Calibrated NASDAQ_100: raw_mean=0.000833, raw_std=0.002626, target_mean=0.000594, target_std=0.014292
+2026-04-08 10:12:19,486 - INFO - Calibrated USD_index: raw_mean=0.025887, raw_std=0.091866, target_mean=0.000578, target_std=0.433643
+2026-04-08 10:12:19,804 - INFO - Calibrated Silver_Futures: raw_mean=0.000982, raw_std=0.003831, target_mean=0.000257, target_std=0.018269
+2026-04-08 10:12:19,805 - INFO - Calibrated Gold_Futures: raw_mean=0.000320, raw_std=0.001736, target_mean=0.000397, target_std=0.009483
+2026-04-08 10:12:19,805 - INFO - Calibrated US30: raw_mean=0.000569, raw_std=0.001928, target_mean=0.000328, target_std=0.011290
+2026-04-08 10:12:19,805 - INFO - Calibrated SnP500: raw_mean=0.000637, raw_std=0.002173, target_mean=0.000391, target_std=0.011551
+2026-04-08 10:12:19,805 - INFO - Calibrated NASDAQ_100: raw_mean=0.000720, raw_std=0.002655, target_mean=0.000594, target_std=0.014292
+2026-04-08 10:12:19,805 - INFO - Calibrated USD_index: raw_mean=0.008724, raw_std=0.091100, target_mean=0.000578, target_std=0.433643
+2026-04-08 10:12:20,126 - INFO - Calibrated Silver_Futures: raw_mean=0.000667, raw_std=0.003664, target_mean=0.000257, target_std=0.018269
+2026-04-08 10:12:20,126 - INFO - Calibrated Gold_Futures: raw_mean=0.000179, raw_std=0.001662, target_mean=0.000397, target_std=0.009483
+2026-04-08 10:12:20,127 - INFO - Calibrated US30: raw_mean=0.000523, raw_std=0.001904, target_mean=0.000328, target_std=0.011290
+2026-04-08 10:12:20,127 - INFO - Calibrated SnP500: raw_mean=0.000565, raw_std=0.002059, target_mean=0.000391, target_std=0.011551
+2026-04-08 10:12:20,127 - INFO - Calibrated NASDAQ_100: raw_mean=0.000689, raw_std=0.002578, target_mean=0.000594, target_std=0.014292
+2026-04-08 10:12:20,127 - INFO - Calibrated USD_index: raw_mean=0.018879, raw_std=0.091355, target_mean=0.000578, target_std=0.433643
+2026-04-08 10:12:20,436 - INFO - Calibrated Silver_Futures: raw_mean=0.000905, raw_std=0.003706, target_mean=0.000257, target_std=0.018269
+2026-04-08 10:12:20,436 - INFO - Calibrated Gold_Futures: raw_mean=0.000362, raw_std=0.001762, target_mean=0.000397, target_std=0.009483
+2026-04-08 10:12:20,436 - INFO - Calibrated US30: raw_mean=0.000635, raw_std=0.001799, target_mean=0.000328, target_std=0.011290
+2026-04-08 10:12:20,436 - INFO - Calibrated SnP500: raw_mean=0.000713, raw_std=0.002041, target_mean=0.000391, target_std=0.011551
+2026-04-08 10:12:20,436 - INFO - Calibrated NASDAQ_100: raw_mean=0.000841, raw_std=0.002492, target_mean=0.000594, target_std=0.014292
+2026-04-08 10:12:20,436 - INFO - Calibrated USD_index: raw_mean=0.013625, raw_std=0.088409, target_mean=0.000578, target_std=0.433643
+2026-04-08 10:12:20,746 - INFO - Calibrated Silver_Futures: raw_mean=0.000392, raw_std=0.003733, target_mean=0.000257, target_std=0.018269
+2026-04-08 10:12:20,746 - INFO - Calibrated Gold_Futures: raw_mean=0.000146, raw_std=0.001713, target_mean=0.000397, target_std=0.009483
+2026-04-08 10:12:20,746 - INFO - Calibrated US30: raw_mean=0.000608, raw_std=0.001845, target_mean=0.000328, target_std=0.011290
+2026-04-08 10:12:20,746 - INFO - Calibrated SnP500: raw_mean=0.000675, raw_std=0.002100, target_mean=0.000391, target_std=0.011551
+2026-04-08 10:12:20,746 - INFO - Calibrated NASDAQ_100: raw_mean=0.000799, raw_std=0.002543, target_mean=0.000594, target_std=0.014292
+2026-04-08 10:12:20,746 - INFO - Calibrated USD_index: raw_mean=0.024566, raw_std=0.088943, target_mean=0.000578, target_std=0.433643
+2026-04-08 10:12:21,037 - INFO - Calibrated Silver_Futures: raw_mean=0.000401, raw_std=0.003970, target_mean=0.000257, target_std=0.018269
+2026-04-08 10:12:21,037 - INFO - Calibrated Gold_Futures: raw_mean=0.000094, raw_std=0.001816, target_mean=0.000397, target_std=0.009483
+2026-04-08 10:12:21,037 - INFO - Calibrated US30: raw_mean=0.000446, raw_std=0.001847, target_mean=0.000328, target_std=0.011290
+2026-04-08 10:12:21,037 - INFO - Calibrated SnP500: raw_mean=0.000521, raw_std=0.002071, target_mean=0.000391, target_std=0.011551
+2026-04-08 10:12:21,037 - INFO - Calibrated NASDAQ_100: raw_mean=0.000623, raw_std=0.002467, target_mean=0.000594, target_std=0.014292
+2026-04-08 10:12:21,038 - INFO - Calibrated USD_index: raw_mean=0.023769, raw_std=0.092533, target_mean=0.000578, target_std=0.433643
+2026-04-08 10:12:21,339 - INFO - Calibrated Silver_Futures: raw_mean=0.000569, raw_std=0.003283, target_mean=0.000257, target_std=0.018269
+2026-04-08 10:12:21,339 - INFO - Calibrated Gold_Futures: raw_mean=0.000128, raw_std=0.001551, target_mean=0.000397, target_std=0.009483
+2026-04-08 10:12:21,339 - INFO - Calibrated US30: raw_mean=0.000495, raw_std=0.001660, target_mean=0.000328, target_std=0.011290
+2026-04-08 10:12:21,339 - INFO - Calibrated SnP500: raw_mean=0.000506, raw_std=0.001960, target_mean=0.000391, target_std=0.011551
+2026-04-08 10:12:21,339 - INFO - Calibrated NASDAQ_100: raw_mean=0.000637, raw_std=0.002359, target_mean=0.000594, target_std=0.014292
+2026-04-08 10:12:21,339 - INFO - Calibrated USD_index: raw_mean=0.022504, raw_std=0.079489, target_mean=0.000578, target_std=0.433643
+2026-04-08 10:12:21,639 - INFO - Calibrated Silver_Futures: raw_mean=0.000354, raw_std=0.003872, target_mean=0.000257, target_std=0.018269
+2026-04-08 10:12:21,639 - INFO - Calibrated Gold_Futures: raw_mean=0.000062, raw_std=0.001838, target_mean=0.000397, target_std=0.009483
+2026-04-08 10:12:21,641 - INFO - Calibrated US30: raw_mean=0.000574, raw_std=0.001723, target_mean=0.000328, target_std=0.011290
+2026-04-08 10:12:21,641 - INFO - Calibrated SnP500: raw_mean=0.000638, raw_std=0.001966, target_mean=0.000391, target_std=0.011551
+2026-04-08 10:12:21,641 - INFO - Calibrated NASDAQ_100: raw_mean=0.000778, raw_std=0.002375, target_mean=0.000594, target_std=0.014292
+2026-04-08 10:12:21,641 - INFO - Calibrated USD_index: raw_mean=0.027849, raw_std=0.091804, target_mean=0.000578, target_std=0.433643
+2026-04-08 10:12:21,968 - INFO - Calibrated Silver_Futures: raw_mean=0.000306, raw_std=0.003954, target_mean=0.000257, target_std=0.018269
+2026-04-08 10:12:21,968 - INFO - Calibrated Gold_Futures: raw_mean=0.000098, raw_std=0.001842, target_mean=0.000397, target_std=0.009483
+2026-04-08 10:12:21,968 - INFO - Calibrated US30: raw_mean=0.000558, raw_std=0.002074, target_mean=0.000328, target_std=0.011290
+2026-04-08 10:12:21,968 - INFO - Calibrated SnP500: raw_mean=0.000598, raw_std=0.002285, target_mean=0.000391, target_std=0.011551
+2026-04-08 10:12:21,968 - INFO - Calibrated NASDAQ_100: raw_mean=0.000788, raw_std=0.002787, target_mean=0.000594, target_std=0.014292
+2026-04-08 10:12:21,968 - INFO - Calibrated USD_index: raw_mean=0.027323, raw_std=0.093578, target_mean=0.000578, target_std=0.433643
+2026-04-08 10:12:22,003 - INFO - Selected best seed metrics: {'avg_vol_gap': 0.001877951883391053, 'max_vol_gap': 0.0018780875328847646, 'avg_mean_gap_z': 4.726391327699361e-08, 'avg_ks_stat': 0.06449553480546175, 'avg_acf_gap': 0.05160696849201075, 'corr_gap': 0.23844342974520125, 'full_avg_ks_stat': 0.056838087949983934, 'recent_avg_ks_stat': 0.06960049937578028, 'full_avg_acf_gap': 0.0534926442229116, 'recent_avg_acf_gap': 0.05034985133807685, 'full_corr_gap': 0.2407528006874175, 'recent_corr_gap': 0.23690384911705706, 'quality_score': 0.7810995033553175, 'quality_label': 'usable_with_caution', 'candidate': 5, 'seed': 0}
+2026-04-08 10:12:22,003 - INFO - Reconstructing price path starting from: {'Silver_Futures': np.float64(32.828), 'Gold_Futures': np.float64(3319.1), 'US30': np.float64(40798.4), 'SnP500': np.float64(5569.06), 'NASDAQ_100': np.float64(19571.02), 'USD_index': np.float64(99.66)}
+2026-04-08 10:12:22,004 - INFO - --- VALIDATION METRICS (Additional Detail) ---
+2026-04-08 10:12:22,004 - INFO - [Silver_Futures] Hist_Std: 0.018265, Gen_Std: 0.018269, Err: 0.02%, Hist_Mean: 0.000257, Gen_Mean: 0.000257
+2026-04-08 10:12:22,004 - INFO - [Gold_Futures] Hist_Std: 0.009481, Gen_Std: 0.009483, Err: 0.02%, Hist_Mean: 0.000397, Gen_Mean: 0.000397
+2026-04-08 10:12:22,004 - INFO - [US30] Hist_Std: 0.011288, Gen_Std: 0.011290, Err: 0.02%, Hist_Mean: 0.000328, Gen_Mean: 0.000328
+2026-04-08 10:12:22,004 - INFO - [SnP500] Hist_Std: 0.011549, Gen_Std: 0.011551, Err: 0.02%, Hist_Mean: 0.000391, Gen_Mean: 0.000391
+2026-04-08 10:12:22,005 - INFO - [NASDAQ_100] Hist_Std: 0.014290, Gen_Std: 0.014292, Err: 0.02%, Hist_Mean: 0.000594, Gen_Mean: 0.000594
+2026-04-08 10:12:22,005 - INFO - [USD_index] Hist_Std: 0.433558, Gen_Std: 0.433643, Err: 0.02%, Hist_Mean: 0.000578, Gen_Mean: 0.000578
+2026-04-08 10:12:22,218 - INFO - Finalized and saved extended data to C:\Users\jebzw\OneDrive\Documents\Github\Gold-Silver-Forcasting\silver_RRL_interpolate_extended.csv
