@@ -2,9 +2,12 @@ import os
 import pandas as pd
 import numpy as np
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
-SOURCE_FILES = ["gold_RRL_interpolate.csv", "silver_RRL_interpolate.csv"]
+from dataset_catalog import (
+    ensure_prepared_source,
+    get_enabled_dataset_configs,
+    get_extended_output_path,
+    get_output_base_name,
+)
 
 
 def classify_columns(df):
@@ -67,12 +70,12 @@ def reconstruct_future(source_df, future_df, feature_names, price_cols):
     return rebuilt
 
 
-def recalibrate_file(source_name):
-    source_path = os.path.join(PROJECT_ROOT, source_name)
-    extended_path = os.path.join(PROJECT_ROOT, f"{os.path.splitext(source_name)[0]}_extended.csv")
+def recalibrate_file(dataset_config):
+    source_path, _ = ensure_prepared_source(dataset_config)
+    extended_path = get_extended_output_path(dataset_config)
 
-    if not os.path.exists(extended_path):
-        print(f"Skipping {source_name}: missing {os.path.basename(extended_path)}")
+    if not extended_path.exists():
+        print(f"Skipping {get_output_base_name(dataset_config)}: missing {extended_path.name}")
         return
 
     source_df = pd.read_csv(source_path)
@@ -87,7 +90,7 @@ def recalibrate_file(source_name):
     future_df = extended_df[extended_df["Date"] > source_df["Date"].max()].copy()
 
     if future_df.empty:
-        print(f"Skipping {source_name}: no generated rows to recalibrate")
+        print(f"Skipping {get_output_base_name(dataset_config)}: no generated rows to recalibrate")
         return
 
     hist_stat_df = to_stationary(source_df, price_cols, other_cols)
@@ -95,7 +98,7 @@ def recalibrate_file(source_name):
     future_stat_df = to_stationary(bridge_df, price_cols, other_cols)
 
     if future_stat_df.empty:
-        print(f"Skipping {source_name}: not enough future rows to recalibrate")
+        print(f"Skipping {get_output_base_name(dataset_config)}: not enough future rows to recalibrate")
         return
 
     calibrated_stat = calibrate_generated_stationary(
@@ -114,12 +117,12 @@ def recalibrate_file(source_name):
 
     final_df = pd.concat([source_df, rebuilt_future], ignore_index=True)
     final_df.to_csv(extended_path, index=False)
-    print(f"Recalibrated {os.path.basename(extended_path)}")
+    print(f"Recalibrated {extended_path.name}")
 
 
 def main():
-    for source_name in SOURCE_FILES:
-        recalibrate_file(source_name)
+    for dataset_config in get_enabled_dataset_configs():
+        recalibrate_file(dataset_config)
 
 
 if __name__ == "__main__":

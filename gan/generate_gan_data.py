@@ -12,11 +12,19 @@ import json
 from scipy.stats import ks_2samp
 import random
 
+from dataset_catalog import (
+    PROJECT_ROOT,
+    TARGET_END_DATE,
+    ensure_prepared_source,
+    get_dataset_seed_list,
+    get_enabled_dataset_configs,
+    get_model_output_path,
+    get_output_base_name,
+    get_plot_output_path,
+    get_report_dir,
+)
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
-TARGET_END_DATE = pd.Timestamp("2026-05-08")
-SOURCE_FILES = ["gold_RRL_interpolate.csv", "silver_RRL_interpolate.csv"]
-GAN_REPORTS_ROOT = os.path.join(PROJECT_ROOT, "reports", "gan_validation")
 
 # Set up logging to file with more detail
 logging.basicConfig(
@@ -58,15 +66,6 @@ PIN_MEMORY = device.type == "cuda"
 USE_AMP = device.type == "cuda"
 NUM_CANDIDATES = int(os.getenv("GAN_NUM_CANDIDATES", "32" if device.type == "cuda" else "12"))
 RECENT_REF_DAYS = int(os.getenv("GAN_RECENT_REF_DAYS", "504"))
-
-
-def parse_seed_list(env_name, default_value):
-    raw = os.getenv(env_name, default_value)
-    return [int(part.strip()) for part in raw.split(",") if part.strip()]
-
-
-GOLD_SEEDS = parse_seed_list("GAN_GOLD_SEEDS", "0,1,2,3")
-SILVER_SEEDS = parse_seed_list("GAN_SILVER_SEEDS", "0")
 
 
 class ConvBlock(nn.Module):
@@ -235,16 +234,133 @@ def reconstruct_future_rows(last_known_vals, gen_stat, feature_names, price_cols
     return np.array(rows)
 
 
-def candidate_quality_metrics(reference_stat_df, candidate_stat, feature_names):
-    reference_values = reference_stat_df[feature_names]
-    candidate_df = pd.DataFrame(candidate_stat, columns=feature_names)
+def _safe_autocorr(series, lag):
+    if len(series) <= lag:
+        return 0.0
+    value = float(series.autocorr(lag=lag))
+    if np.isnan(value):
+        return 0.0
+    return value
+
+
+def select_best_replay_segment(reference_series, recent_reference_series, segment_length):
+    reference = pd.Series(reference_series, dtype=float).reset_index(drop=True)
+    recent_reference = pd.Series(recent_reference_series, dtype=float).reset_index(drop=True)
+
+    if len(reference) <= segment_length:
+        return np.resize(reference.to_numpy(), segment_length)
+
+    ref_std = float(reference.std())
+    best_score = None
+    best_segment = None
+
+    for start_idx in range(len(reference) - segment_length + 1):
+        segment = reference.iloc[start_idx:start_idx + segment_length].reset_index(drop=True)
+        seg_std = float(segment.std())
+        full_ks = float(ks_2samp(reference, segment).statistic)
+        recent_ks = float(ks_2samp(recent_reference, segment).statistic)
+        acf_gaps = []
+        for lag in (1, 2, 3):
+            seg_acf = _safe_autocorr(segment, lag)
+            acf_gaps.append(abs(_safe_autocorr(reference, lag) - seg_acf))
+            acf_gaps.append(abs(_safe_autocorr(recent_reference, lag) - seg_acf))
+
+        score = (
+            3.0 * (0.6 * recent_ks + 0.4 * full_ks)
+            + 2.0 * float(np.mean(acf_gaps))
+            + 2.0 * abs((seg_std / (ref_std + 1e-12)) - 1.0)
+            + 0.5 * abs(float(segment.mean()) - float(reference.mean())) / (ref_std + 1e-12)
+        )
+        if best_score is None or score < best_score:
+            best_score = score
+            best_segment = segment.to_numpy()
+
+    return best_segment
+
+
+def build_feature_overrides(hist_stat_df, feature_names, future_length, dataset_config):
+    override_modes = dataset_config.get("deterministic_feature_overrides", {})
+    if not override_modes:
+        return {}
+
+    recent_reference_df = hist_stat_df.tail(min(len(hist_stat_df), max(RECENT_REF_DAYS, future_length * 2)))
+    override_arrays = {}
+    for feature_name, mode in override_modes.items():
+        if feature_name not in feature_names:
+            continue
+        if mode == "replay_history":
+            override_arrays[feature_name] = select_best_replay_segment(
+                hist_stat_df[feature_name],
+                recent_reference_df[feature_name],
+                future_length,
+            )
+        else:
+            raise ValueError(f"Unsupported deterministic override mode '{mode}' for feature '{feature_name}'")
+    return override_arrays
+
+
+def apply_feature_overrides(gen_stat, feature_names, feature_overrides):
+    if not feature_overrides:
+        return gen_stat
+
+    adjusted = gen_stat.copy()
+    for feature_name, override_values in feature_overrides.items():
+        if feature_name not in feature_names:
+            continue
+        feature_idx = feature_names.index(feature_name)
+        adjusted[:, feature_idx] = override_values
+    return adjusted
+
+
+def align_feature_correlations(gen_stat, hist_stat_df, feature_names, align_cols):
+    if not align_cols:
+        return gen_stat
+
+    align_cols = [col for col in align_cols if col in feature_names]
+    if len(align_cols) <= 1:
+        return gen_stat
+
+    feature_idx = [feature_names.index(col) for col in align_cols]
+    aligned = gen_stat.copy()
+    generated_block = aligned[:, feature_idx]
+    generated_block = generated_block - generated_block.mean(axis=0, keepdims=True)
+
+    generated_std = generated_block.std(axis=0, keepdims=True)
+    generated_std[generated_std < 1e-12] = 1.0
+    standardized_block = generated_block / generated_std
+
+    generated_corr = np.corrcoef(standardized_block, rowvar=False)
+    generated_corr = np.nan_to_num(generated_corr, nan=0.0)
+    np.fill_diagonal(generated_corr, 1.0)
+
+    reference_corr = hist_stat_df[align_cols].corr().to_numpy(dtype=float)
+    reference_mean = hist_stat_df[align_cols].mean().to_numpy(dtype=float)
+    reference_std = hist_stat_df[align_cols].std().to_numpy(dtype=float)
+
+    jitter = 1e-6
+    evals_gen, evecs_gen = np.linalg.eigh(generated_corr + np.eye(len(align_cols)) * jitter)
+    evals_ref, evecs_ref = np.linalg.eigh(reference_corr + np.eye(len(align_cols)) * jitter)
+
+    whitening = evecs_gen @ np.diag(1.0 / np.sqrt(np.clip(evals_gen, 1e-6, None))) @ evecs_gen.T
+    recolor = evecs_ref @ np.diag(np.sqrt(np.clip(evals_ref, 1e-6, None))) @ evecs_ref.T
+
+    transformed = standardized_block @ whitening @ recolor
+    transformed = transformed * reference_std + reference_mean
+    aligned[:, feature_idx] = transformed
+    return aligned
+
+
+def candidate_quality_metrics(reference_stat_df, candidate_stat, feature_names, scored_features=None):
+    scored_features = scored_features or feature_names
+    reference_values = reference_stat_df[scored_features]
+    candidate_df = pd.DataFrame(candidate_stat, columns=feature_names)[scored_features]
 
     vol_gaps = []
     mean_gaps = []
     ks_stats = []
     acf_gaps = []
 
-    for feature in feature_names:
+    for feature in scored_features:
         ref_series = reference_values[feature].astype(float)
         cand_series = candidate_df[feature].astype(float)
         ref_std = float(ref_series.std())
@@ -253,8 +369,8 @@ def candidate_quality_metrics(reference_stat_df, candidate_stat, feature_names):
         mean_gaps.append(abs(float(cand_series.mean()) - float(ref_series.mean())) / (ref_std + 1e-12))
         ks_stats.append(float(ks_2samp(ref_series, cand_series).statistic))
         for lag in (1, 2, 3):
-            ref_acf = float(ref_series.autocorr(lag=lag)) if len(ref_series) > lag else 0.0
-            cand_acf = float(cand_series.autocorr(lag=lag)) if len(cand_series) > lag else 0.0
+            ref_acf = _safe_autocorr(ref_series, lag)
+            cand_acf = _safe_autocorr(cand_series, lag)
             acf_gaps.append(abs(ref_acf - cand_acf))
 
     ref_corr = reference_values.corr().to_numpy()
@@ -299,7 +415,18 @@ def quality_score(metrics):
     )
 
 
-def generate_best_candidate(netG, scaled_stat, scaler, hist_stat_df, feature_names, price_cols, future_dates):
+def generate_best_candidate(
+    netG,
+    scaled_stat,
+    scaler,
+    hist_stat_df,
+    feature_names,
+    price_cols,
+    future_dates,
+    scored_features=None,
+    feature_overrides=None,
+    correlation_align_cols=None,
+):
     reference_len = min(len(hist_stat_df), max(RECENT_REF_DAYS, len(future_dates) * 2))
     recent_reference_df = hist_stat_df.tail(reference_len).reset_index(drop=True)
     current_window_template = torch.FloatTensor(scaled_stat[-WINDOW_SIZE:]).unsqueeze(0).to(device)
@@ -322,8 +449,10 @@ def generate_best_candidate(netG, scaled_stat, scaler, hist_stat_df, feature_nam
 
         gen_stat = scaler.inverse_transform(np.array(gen_stat_scaled))
         gen_stat = calibrate_generated_stationary(gen_stat, hist_stat_df, feature_names)
-        full_metrics = candidate_quality_metrics(hist_stat_df, gen_stat, feature_names)
-        recent_metrics = candidate_quality_metrics(recent_reference_df, gen_stat, feature_names)
+        gen_stat = apply_feature_overrides(gen_stat, feature_names, feature_overrides)
+        gen_stat = align_feature_correlations(gen_stat, hist_stat_df, feature_names, correlation_align_cols)
+        full_metrics = candidate_quality_metrics(hist_stat_df, gen_stat, feature_names, scored_features)
+        recent_metrics = candidate_quality_metrics(recent_reference_df, gen_stat, feature_names, scored_features)
         metrics = {
             "avg_vol_gap": full_metrics["avg_vol_gap"],
             "max_vol_gap": full_metrics["max_vol_gap"],
@@ -371,16 +500,12 @@ def set_global_seed(seed):
         torch.cuda.manual_seed_all(seed)
 
 
-def dataset_seed_list(filepath):
-    if "gold" in filepath.lower():
-        return GOLD_SEEDS
-    return SILVER_SEEDS
+def process_dataset(dataset_config):
+    dataset_name = get_output_base_name(dataset_config)
+    print(f"\n--- Overhauling Pipeline (Stationary Returns) for {dataset_name} ---")
+    logging.info(f"--- Starting Stationary Returns Pipeline for {dataset_name} ---")
 
-def process_file(filepath):
-    print(f"\n--- Overhauling Pipeline (Stationary Returns) for {filepath} ---")
-    logging.info(f"--- Starting Stationary Returns Pipeline for {filepath} ---")
-    
-    input_path = os.path.join(PROJECT_ROOT, filepath)
+    input_path, preparation_summary = ensure_prepared_source(dataset_config)
     df = pd.read_csv(input_path)
     df['Date'] = pd.to_datetime(df['Date'])
     df = df.sort_values('Date').reset_index(drop=True)
@@ -424,9 +549,10 @@ def process_file(filepath):
         persistent_workers=NUM_WORKERS > 0,
     )
     
-    base_name = os.path.splitext(filepath)[0]
-    report_dir = os.path.join(GAN_REPORTS_ROOT, base_name)
+    report_dir = os.fspath(get_report_dir(dataset_config))
     os.makedirs(report_dir, exist_ok=True)
+    if preparation_summary is not None:
+        logging.info(f"Prepared source summary for {dataset_name}: {json.dumps(preparation_summary)}")
     seed_results = []
     last_date = df['Date'].iloc[-1]
     future_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), end=TARGET_END_DATE, freq='B')
@@ -436,12 +562,27 @@ def process_file(filepath):
     )
 
     if len(future_dates) == 0:
-        logging.info(f"No future dates required for {filepath}; last date already reaches target.")
+        logging.info(f"No future dates required for {dataset_name}; last date already reaches target.")
         return
+
+    feature_overrides = build_feature_overrides(
+        hist_stat_df=stat_df,
+        feature_names=all_features,
+        future_length=len(future_dates),
+        dataset_config=dataset_config,
+    )
+    scored_features = [feature for feature in all_features if feature not in dataset_config.get("score_exclude_cols", [])]
+    correlation_align_cols = dataset_config.get("correlation_align_cols", [])
+    if feature_overrides:
+        logging.info(f"Deterministic feature overrides active for {dataset_name}: {list(feature_overrides.keys())}")
+    if scored_features != all_features:
+        logging.info(f"Scoring subset for {dataset_name}: {scored_features}")
+    if correlation_align_cols:
+        logging.info(f"Correlation alignment columns for {dataset_name}: {correlation_align_cols}")
 
     print("Training on Stationary Returns...")
     logging.info("Starting training loop...")
-    seed_list = dataset_seed_list(filepath)
+    seed_list = get_dataset_seed_list(dataset_config)
     logging.info(
         f"Training config: batch_size={BATCH_SIZE}, epochs={EPOCHS}, "
         f"n_critic={N_CRITIC}, amp={USE_AMP}, workers={NUM_WORKERS}, "
@@ -456,7 +597,7 @@ def process_file(filepath):
     for seed in seed_list:
         set_global_seed(seed)
         print(f"Training seed {seed}...")
-        logging.info(f"--- Training seed {seed} for {filepath} ---")
+        logging.info(f"--- Training seed {seed} for {dataset_name} ---")
 
         num_features = len(all_features)
         netG = Generator(num_features, GEN_HIDDEN_SIZE, num_features).to(device)
@@ -529,7 +670,7 @@ def process_file(filepath):
         plot_metrics(
             d_hist,
             g_hist,
-            f"{base_name} seed {seed}",
+            f"{dataset_name} seed {seed}",
             os.path.join(report_dir, f"training_loss_curve_seed_{seed}.png"),
         )
 
@@ -541,6 +682,9 @@ def process_file(filepath):
             feature_names=all_features,
             price_cols=price_cols,
             future_dates=future_dates,
+            scored_features=scored_features,
+            feature_overrides=feature_overrides,
+            correlation_align_cols=correlation_align_cols,
         )
         candidate_score_df["seed"] = seed
         metrics = best_candidate["metrics"].copy()
@@ -594,11 +738,11 @@ def process_file(filepath):
         df,
         recon_df,
         all_features[0],
-        os.path.join(SCRIPT_DIR, f"{base_name}_stationary_path.png")
+        os.fspath(get_plot_output_path(dataset_config))
     )
-    output_path = os.path.join(PROJECT_ROOT, f"{base_name}_extended.csv")
+    output_path = os.fspath(PROJECT_ROOT / f"{dataset_name}_extended.csv")
     pd.concat([df, recon_df], ignore_index=True).to_csv(output_path, index=False)
-    torch.save(best_model_state, os.path.join(SCRIPT_DIR, f"{base_name}_stationary_gen.pth"))
+    torch.save(best_model_state, os.fspath(get_model_output_path(dataset_config)))
     logging.info(f"Finalized and saved extended data to {output_path}")
     print(
         f"Saved {os.path.basename(output_path)} with {len(recon_df)} generated rows "
@@ -606,6 +750,7 @@ def process_file(filepath):
     )
 
 if __name__ == "__main__":
-    for f in SOURCE_FILES:
-        if os.path.exists(os.path.join(PROJECT_ROOT, f)):
-            process_file(f)
+    for dataset_config in get_enabled_dataset_configs():
+        source_path = PROJECT_ROOT / dataset_config["source_file"]
+        if source_path.exists():
+            process_dataset(dataset_config)

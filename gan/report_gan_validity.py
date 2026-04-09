@@ -5,11 +5,14 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.stats import ks_2samp, skew, kurtosis
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
-REPORTS_ROOT = os.path.join(PROJECT_ROOT, "reports", "gan_validation")
-TARGET_END_DATE = pd.Timestamp("2026-05-08")
-SOURCE_FILES = ["gold_RRL_interpolate.csv", "silver_RRL_interpolate.csv"]
+from dataset_catalog import (
+    REPORTS_ROOT,
+    TARGET_END_DATE,
+    ensure_prepared_source,
+    get_enabled_dataset_configs,
+    get_extended_output_path,
+    get_output_base_name,
+)
 
 
 def classify_columns(df):
@@ -142,10 +145,10 @@ def save_acf_panel(hist_stat_df, future_stat_df, columns, output_path, title):
     plt.close(fig)
 
 
-def report_file(source_name):
-    source_path = os.path.join(PROJECT_ROOT, source_name)
-    extended_path = os.path.join(PROJECT_ROOT, f"{os.path.splitext(source_name)[0]}_extended.csv")
-    if not os.path.exists(extended_path):
+def report_file(dataset_config):
+    source_path, _ = ensure_prepared_source(dataset_config)
+    extended_path = get_extended_output_path(dataset_config)
+    if not extended_path.exists():
         raise FileNotFoundError(f"Missing generated file: {extended_path}")
 
     source_df = pd.read_csv(source_path)
@@ -166,7 +169,7 @@ def report_file(source_name):
     bridge_future = pd.concat([source_df.tail(1), future_df], ignore_index=True)
     future_stat_df = stationary_frame(bridge_future, price_cols, other_cols)
 
-    dataset_name = os.path.splitext(source_name)[0]
+    dataset_name = get_output_base_name(dataset_config)
     report_dir = os.path.join(REPORTS_ROOT, dataset_name)
     plots_dir = os.path.join(report_dir, "plots")
     os.makedirs(plots_dir, exist_ok=True)
@@ -314,8 +317,8 @@ def report_file(source_name):
 
 def main():
     os.makedirs(REPORTS_ROOT, exist_ok=True)
-    for source_name in SOURCE_FILES:
-        report_file(source_name)
+    for dataset_config in get_enabled_dataset_configs():
+        report_file(dataset_config)
 
 
 if __name__ == "__main__":

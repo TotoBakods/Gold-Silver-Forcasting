@@ -8,22 +8,18 @@ from pathlib import Path
 import optuna
 from optuna.samplers import TPESampler
 
+from dataset_catalog import (
+    REPORTS_ROOT,
+    get_all_dataset_configs,
+    get_dataset_config_by_asset,
+    get_extended_output_path,
+    get_model_output_path,
+    get_plot_output_path,
+)
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
-REPORTS_ROOT = PROJECT_ROOT / "reports" / "gan_validation"
 OUTPUT_DIR = REPORTS_ROOT / "optuna"
-GENERATED_PATHS = [
-    PROJECT_ROOT / "gold_RRL_interpolate_extended.csv",
-    PROJECT_ROOT / "silver_RRL_interpolate_extended.csv",
-    SCRIPT_DIR / "gold_RRL_interpolate_stationary_gen.pth",
-    SCRIPT_DIR / "silver_RRL_interpolate_stationary_gen.pth",
-    SCRIPT_DIR / "gold_RRL_interpolate_stationary_path.png",
-    SCRIPT_DIR / "silver_RRL_interpolate_stationary_path.png",
-    SCRIPT_DIR / "gan_training_stationary.log",
-    REPORTS_ROOT / "gold_RRL_interpolate",
-    REPORTS_ROOT / "silver_RRL_interpolate",
-]
 
 TUNING_SEED = int(os.getenv("GAN_OPTUNA_SEED", "42"))
 N_TRIALS = int(os.getenv("GAN_OPTUNA_TRIALS", "12"))
@@ -32,9 +28,26 @@ GOLD_SEEDS = os.getenv("GAN_OPTUNA_GOLD_SEEDS", "0,1,2")
 SILVER_SEEDS = os.getenv("GAN_OPTUNA_SILVER_SEEDS", "0")
 NUM_CANDIDATES = os.getenv("GAN_OPTUNA_NUM_CANDIDATES", "12")
 
+GOLD_CONFIG = get_dataset_config_by_asset("gold")
+SILVER_CONFIG = get_dataset_config_by_asset("silver")
+
+
+def generated_paths():
+    paths = [SCRIPT_DIR / "gan_training_stationary.log"]
+    for dataset_config in get_all_dataset_configs():
+        paths.extend(
+            [
+                get_extended_output_path(dataset_config),
+                get_model_output_path(dataset_config),
+                get_plot_output_path(dataset_config),
+                REPORTS_ROOT / dataset_config["name"],
+            ]
+        )
+    return paths
+
 
 def clean_trial_outputs():
-    for path in GENERATED_PATHS:
+    for path in generated_paths():
         if path.is_dir():
             shutil.rmtree(path, ignore_errors=True)
         elif path.exists():
@@ -87,8 +100,8 @@ def objective(trial: optuna.Trial):
             raise optuna.TrialPruned("CUDA OOM")
         raise
 
-    gold = load_selected_metrics("gold_RRL_interpolate")
-    silver = load_selected_metrics("silver_RRL_interpolate")
+    gold = load_selected_metrics(GOLD_CONFIG["name"])
+    silver = load_selected_metrics(SILVER_CONFIG["name"])
 
     gold_score = gold["quality_score"]
     silver_score = silver["quality_score"]

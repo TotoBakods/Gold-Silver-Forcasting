@@ -4,22 +4,32 @@ import subprocess
 import sys
 from pathlib import Path
 
+from dataset_catalog import (
+    REPORTS_ROOT,
+    get_all_dataset_configs,
+    get_enabled_dataset_configs,
+    get_extended_output_path,
+    get_model_output_path,
+    get_plot_output_path,
+)
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
-REPORTS_ROOT = PROJECT_ROOT / "reports" / "gan_validation"
 STRICT_READINESS = os.getenv("GAN_STRICT_READINESS", "1") != "0"
-
-GENERATED_FILES = [
-    PROJECT_ROOT / "gold_RRL_interpolate_extended.csv",
-    PROJECT_ROOT / "silver_RRL_interpolate_extended.csv",
-    SCRIPT_DIR / "gold_RRL_interpolate_stationary_gen.pth",
-    SCRIPT_DIR / "silver_RRL_interpolate_stationary_gen.pth",
-    SCRIPT_DIR / "gold_RRL_interpolate_stationary_path.png",
-    SCRIPT_DIR / "silver_RRL_interpolate_stationary_path.png",
-    SCRIPT_DIR / "gan_training_stationary.log",
-]
 DEFAULT_BATCH_CANDIDATES = [512, 384, 320, 256, 192, 128, 96, 64, 48, 32]
+
+
+def generated_files():
+    paths = [SCRIPT_DIR / "gan_training_stationary.log"]
+    for dataset_config in get_all_dataset_configs():
+        paths.extend(
+            [
+                get_extended_output_path(dataset_config),
+                get_model_output_path(dataset_config),
+                get_plot_output_path(dataset_config),
+            ]
+        )
+    return paths
 
 
 def remove_path(path: Path):
@@ -33,7 +43,7 @@ def remove_path(path: Path):
 
 def clean_outputs():
     print("Cleaning previous GAN outputs...", flush=True)
-    for path in GENERATED_FILES:
+    for path in generated_files():
         remove_path(path)
     if REPORTS_ROOT.exists():
         remove_path(REPORTS_ROOT)
@@ -128,8 +138,8 @@ def main():
         print("\nTraining readiness check reported issues, but strict mode is off so the pipeline will finish.", flush=True)
     print("\nGAN pipeline completed successfully.", flush=True)
     print(f"Used GAN batch size: {used_batch_size}", flush=True)
-    print(f"Extended datasets: {PROJECT_ROOT / 'gold_RRL_interpolate_extended.csv'}", flush=True)
-    print(f"Extended datasets: {PROJECT_ROOT / 'silver_RRL_interpolate_extended.csv'}", flush=True)
+    for dataset_config in get_enabled_dataset_configs():
+        print(f"Extended dataset: {get_extended_output_path(dataset_config)}", flush=True)
     print(f"Reports: {REPORTS_ROOT}", flush=True)
     if not readiness_ok:
         print("Readiness status: not all datasets are ready for training.", flush=True)

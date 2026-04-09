@@ -2,11 +2,7 @@ import json
 import os
 import sys
 
-
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
-REPORTS_ROOT = os.path.join(PROJECT_ROOT, "reports", "gan_validation")
-DATASETS = ["gold_RRL_interpolate", "silver_RRL_interpolate"]
+from dataset_catalog import REPORTS_ROOT, get_enabled_dataset_configs
 
 
 def evaluate_dataset(dataset_name):
@@ -37,7 +33,8 @@ def evaluate_dataset(dataset_name):
 
 def main():
     overall_ready = True
-    for dataset_name in DATASETS:
+    dataset_names = [config["name"] for config in get_enabled_dataset_configs()]
+    for dataset_name in dataset_names:
         result = evaluate_dataset(dataset_name)
         print(f"\n[{dataset_name}] {result['status'].upper()}")
         if "metrics" in result:

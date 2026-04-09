@@ -3,10 +3,13 @@ import sys
 import pandas as pd
 import numpy as np
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
-TARGET_END_DATE = pd.Timestamp("2026-05-08")
-SOURCE_FILES = ["gold_RRL_interpolate.csv", "silver_RRL_interpolate.csv"]
+from dataset_catalog import (
+    TARGET_END_DATE,
+    ensure_prepared_source,
+    get_enabled_dataset_configs,
+    get_extended_output_path,
+    get_output_base_name,
+)
 
 
 def classify_columns(df):
@@ -22,15 +25,15 @@ def stationary_series(series, is_price):
     return series.diff().dropna()
 
 
-def validate_file(source_name):
-    source_path = os.path.join(PROJECT_ROOT, source_name)
-    extended_path = os.path.join(PROJECT_ROOT, f"{os.path.splitext(source_name)[0]}_extended.csv")
+def validate_file(dataset_config):
+    source_path, _ = ensure_prepared_source(dataset_config)
+    extended_path = get_extended_output_path(dataset_config)
 
-    if not os.path.exists(extended_path):
+    if not extended_path.exists():
         return {
-            "file": source_name,
+            "file": get_output_base_name(dataset_config),
             "status": "missing",
-            "errors": [f"Extended file not found: {os.path.basename(extended_path)}"],
+            "errors": [f"Extended file not found: {extended_path.name}"],
             "checks": [],
         }
 
@@ -121,7 +124,7 @@ def validate_file(source_name):
             )
 
     return {
-        "file": source_name,
+        "file": get_output_base_name(dataset_config),
         "status": "valid" if not errors else "invalid",
         "errors": errors,
         "checks": checks,
@@ -130,8 +133,8 @@ def validate_file(source_name):
 
 def main():
     overall_ok = True
-    for source_name in SOURCE_FILES:
-        result = validate_file(source_name)
+    for dataset_config in get_enabled_dataset_configs():
+        result = validate_file(dataset_config)
         print(f"\n[{result['file']}] {result['status'].upper()}")
         for name, value in result["checks"]:
             print(f"  {name}: {value}")

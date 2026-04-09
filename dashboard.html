@@ -162,6 +162,13 @@
             font-size: 0.9rem;
         }
 
+        .model-helper {
+            margin-top: 0.85rem;
+            color: var(--text-muted);
+            font-size: 0.92rem;
+            text-align: center;
+        }
+
         .dashboard-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -393,6 +400,7 @@
             <button class="toggle-btn active gold" onclick="switchAsset('gold')" id="btn-gold">Gold Futures</button>
             <button class="toggle-btn silver" onclick="switchAsset('silver')" id="btn-silver">Silver Futures</button>
         </div>
+        <div class="model-helper" id="asset-model-label">Loading active model...</div>
     </header>
 
     <div class="container">
@@ -402,12 +410,18 @@
             <div class="date-badge" id="today-date">--</div>
             <div class="date-controls">
                 <input class="date-input" type="date" id="today-picker">
+                <button class="btn-secondary" id="use-today-btn" onclick="useReferenceToday()">
+                    Use Today
+                </button>
                 <button class="btn-secondary" id="set-date-btn" onclick="setSimulationDate()">
                     Set This As Today
                 </button>
             </div>
             <div class="date-helper">
                 Pick any simulation day in the test window and the dashboard will realign to it.
+            </div>
+            <div class="date-helper" id="today-alignment-note">
+                --
             </div>
         </div>
 
@@ -461,7 +475,7 @@
                 Proceed to Next Day
             </button>
             <div style="margin-top: 1rem; color: var(--text-muted); font-size: 0.9rem;">
-                This advances the calendar mathematically using structurally locked weights to ensure pure R² validity.
+                This only advances the calendar. Forecasts are precomputed once from frozen model weights.
             </div>
         </div>
         
@@ -502,6 +516,7 @@
         function setBusyState(isBusy) {
             document.getElementById('loader').classList.toggle('active', isBusy);
             document.getElementById('next-btn').disabled = isBusy;
+            document.getElementById('use-today-btn').disabled = isBusy;
             document.getElementById('set-date-btn').disabled = isBusy;
             document.getElementById('today-picker').disabled = isBusy;
         }
@@ -593,6 +608,10 @@
                 document.getElementById('today-picker').value = data.current_date;
                 if (data.min_date) document.getElementById('today-picker').min = data.min_date;
                 if (data.max_date) document.getElementById('today-picker').max = data.max_date;
+                const todayNote = data.today_alignment_note
+                    ? data.today_alignment_note
+                    : `Reference today is ${data.reference_today}. Predictions can only use dates inside ${data.min_date} to ${data.max_date}.`;
+                document.getElementById('today-alignment-note').innerText = todayNote;
                 
                 if (data.is_market_day) {
                     const pred = data.predicted_price;
@@ -617,7 +636,22 @@
                 document.getElementById('metric-rmse').innerText = data.rolling_rmse !== null ? `$${data.rolling_rmse}` : '--';
                 document.getElementById('metric-r2').innerText = data.rolling_r2 !== null ? data.rolling_r2 : '--';
                 
-                document.getElementById('last-train-date').innerText = data.last_train_price ? `${data.yesterday_date || '-'} @ $${data.last_train_price.toFixed(2)}` : '--';
+                const split = data.data_split || {};
+                let modelLabel = data.dataset_label || '--';
+                if (data.model_seed !== null && data.model_seed !== undefined) {
+                    modelLabel += ` | Seed ${data.model_seed}`;
+                }
+                if (split.requested_train_end_date) {
+                    const rawTestStart = split.raw_test_rows ? data.min_date : null;
+                    modelLabel += ` | Train through ${split.requested_train_end_date}`;
+                    if (rawTestStart) modelLabel += ` | Test from ${rawTestStart}`;
+                }
+                if (data.test_row_count) {
+                    modelLabel += ` | ${data.test_row_count} test rows`;
+                }
+                document.getElementById('asset-model-label').innerText = modelLabel;
+
+                document.getElementById('last-train-date').innerText = data.last_train_price ? `${data.last_train_date || '-'} @ $${data.last_train_price.toFixed(2)}` : '--';
                 
                 const tbody = document.getElementById('history-body');
                 tbody.innerHTML = '';
@@ -658,6 +692,25 @@
                 if (!res.ok) {
                     alert(data.detail || 'Failed to update simulation date.');
                     return;
+                }
+                await fetchStatus();
+            } catch (e) {
+                alert('Failed to reach API.');
+            }
+            setBusyState(false);
+        }
+
+        async function useReferenceToday() {
+            setBusyState(true);
+            try {
+                const res = await fetch(`${API_BASE}/use_today/${currentAsset}`, { method: 'POST' });
+                const data = await res.json();
+                if (!res.ok) {
+                    alert(data.detail || 'Failed to align the dashboard to today.');
+                    return;
+                }
+                if (data.message) {
+                    console.log(data.message);
                 }
                 await fetchStatus();
             } catch (e) {

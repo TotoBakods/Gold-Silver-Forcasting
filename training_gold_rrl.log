@@ -124,3 +124,18 @@ If you will use compatible GPU(s) not attached to this host, e.g. by running a m
 2026-04-08 10:42:32,859 [INFO] SEED 42 EVALUATION
 2026-04-08 10:42:34,325 [INFO] SEED 99 EVALUATION
 2026-04-08 10:42:36,315 [INFO] SEED 123 EVALUATION
+2026-04-09 20:25:06,532 [INFO] GPU found: NVIDIA GeForce RTX 3060
+2026-04-09 20:25:06,583 [INFO] Exported date split files using cutoff 2026-04-09: df_gold_dataset_gepu_extended_train.csv (2878 rows), df_gold_dataset_gepu_extended_test.csv (21 rows)
+2026-04-09 20:25:06,584 [INFO] Using date cutoff split at 2026-04-09: model_train_rows=2876, model_test_rows=21, train_last_input_date=2026-04-08, test_first_input_date=2026-04-09
+2026-04-09 20:25:41,966 [INFO] Saved split summary to reports/df_gold_dataset_gepu_datecut_quick\data_split_summary.json
+2026-04-09 20:25:41,967 [INFO] SEED 42 EVALUATION
+2026-04-09 20:32:24,897 [INFO] GPU found: NVIDIA GeForce RTX 3060
+2026-04-09 20:32:24,971 [INFO] Exported date split files using cutoff 2026-04-09: df_gold_dataset_gepu_extended_train.csv (2878 rows), df_gold_dataset_gepu_extended_test.csv (21 rows)
+2026-04-09 20:32:24,973 [INFO] Using date cutoff split at 2026-04-09: model_train_rows=2876, model_test_rows=21, train_last_input_date=2026-04-08, test_first_input_date=2026-04-09
+2026-04-09 21:04:39,262 [INFO] Saved split summary to reports/df_gold_dataset_gepu_datecut_full\data_split_summary.json
+2026-04-09 21:04:39,263 [INFO] SEED 0 EVALUATION
+2026-04-09 21:04:56,678 [INFO] SEED 1 EVALUATION
+2026-04-09 21:05:15,825 [INFO] SEED 2 EVALUATION
+2026-04-09 21:05:27,893 [INFO] SEED 42 EVALUATION
+2026-04-09 21:05:42,565 [INFO] SEED 99 EVALUATION
+2026-04-09 21:05:57,604 [INFO] SEED 123 EVALUATION

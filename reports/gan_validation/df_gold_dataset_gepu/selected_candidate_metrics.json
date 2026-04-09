@@ -1,0 +1,18 @@
+{
+  "avg_vol_gap": 0.002169814619890609,
+  "max_vol_gap": 0.0038386099019760422,
+  "avg_mean_gap_z": 0.0001596781884762253,
+  "avg_ks_stat": 0.13234121146742506,
+  "avg_acf_gap": 0.08885791871685425,
+  "corr_gap": 0.030710608037542855,
+  "full_avg_ks_stat": 0.14256631538184936,
+  "recent_avg_ks_stat": 0.12552447552447552,
+  "full_avg_acf_gap": 0.0982477335920688,
+  "recent_avg_acf_gap": 0.08259804213337786,
+  "full_corr_gap": 0.019196090323300975,
+  "recent_corr_gap": 0.038386953180370775,
+  "quality_score": 0.6482573760490409,
+  "quality_label": "usable_with_caution",
+  "candidate": 27,
+  "seed": 2
+}

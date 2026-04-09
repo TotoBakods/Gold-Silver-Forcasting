@@ -86,12 +86,13 @@ class CNN_BiLSTM(nn.Module):
 # --- STATE AND CONFIG ---
 ASSET_CONFIG = {
     "gold": {
-        "train_csv": "gold_RRL_interpolate_train.csv",
-        "test_csv": "gold_RRL_interpolate_test.csv",
-        "best_params": "reports/gold_RRL_interpolate/gold_best_params_optimized.json",
-        "model_dir": "models/gold_RRL_interpolate/seed_42",
-        "model_pth": "cnn_bilstm_seed42.pth",
-        "target_col": "Gold_Futures"
+        "train_csv": "df_gold_dataset_gepu_extended_train.csv",
+        "test_csv": "df_gold_dataset_gepu_extended_test.csv",
+        "best_params": "reports/df_gold_dataset_gepu_datecut_full/gold_best_params_optimized.json",
+        "model_dir": "models/df_gold_dataset_gepu_datecut_full/seed_99",
+        "model_pth": "cnn_bilstm_seed99.pth",
+        "target_col": "Gold_Futures",
+        "dataset_label": "GEPU Extended Date-Cut Model",
     },
     "silver": {
         "train_csv": "silver_RRL_interpolate_train.csv",
@@ -99,15 +100,16 @@ ASSET_CONFIG = {
         "best_params": "reports/silver_RRL_interpolate/silver_yahoo_best_params.json",
         "model_dir": "models/silver_RRL_interpolate/seed_42",
         "model_pth": "cnn_bilstm_seed42.pth",
-        "target_col": "Silver_Futures"
+        "target_col": "Silver_Futures",
+        "dataset_label": "Baseline Silver Model",
     }
 }
 
 STATE_FILE = "simulation_state.json"
 
 state = {
-    "gold": {"test_idx": 0, "model": None, "x_scaler": None, "y_scaler": None, "feature_cols": None, "lookback": None, "params": None, "current_date": None, "history": {}},
-    "silver": {"test_idx": 0, "model": None, "x_scaler": None, "y_scaler": None, "feature_cols": None, "lookback": None, "params": None, "current_date": None, "history": {}}
+    "gold": {"test_idx": 0, "model": None, "x_scaler": None, "y_scaler": None, "feature_cols": None, "lookback": None, "params": None, "current_date": None, "history": {}, "data_split": None, "model_seed": None, "test_df": None, "forecast_rows": None},
+    "silver": {"test_idx": 0, "model": None, "x_scaler": None, "y_scaler": None, "feature_cols": None, "lookback": None, "params": None, "current_date": None, "history": {}, "data_split": None, "model_seed": None, "test_df": None, "forecast_rows": None}
 }
 
 def save_runtime_state():
@@ -123,6 +125,114 @@ def save_runtime_state():
     with open(temp_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)
     os.replace(temp_path, STATE_FILE)
+
+def get_reference_today(asset=None):
+    override = os.getenv("SIMULATION_TODAY")
+    if override:
+        try:
+            return datetime.date.fromisoformat(override)
+        except ValueError:
+            pass
+    if asset:
+        data_split = state.get(asset, {}).get("data_split") or {}
+        split_today = data_split.get("requested_train_end_date")
+        if split_today:
+            try:
+                return datetime.date.fromisoformat(split_today)
+            except ValueError:
+                pass
+    return datetime.date.today()
+
+def clamp_date_to_window(selected_date, min_date, max_date):
+    if selected_date < min_date:
+        return min_date
+    if selected_date > max_date:
+        return max_date
+    return selected_date
+
+def set_simulation_date_state(asset, selected_date):
+    st = state[asset]
+    test_df = get_test_dates(asset)
+
+    new_test_idx = int((test_df["Date_obj"] < selected_date).sum())
+    st["current_date"] = selected_date
+    st["test_idx"] = new_test_idx
+    st["history"] = {
+        logged_date: pred
+        for logged_date, pred in st["history"].items()
+        if datetime.date.fromisoformat(logged_date) < selected_date
+    }
+    save_runtime_state()
+
+    return {
+        "current_date": str(st["current_date"]),
+        "simulation_day": st["test_idx"]
+    }
+
+def load_level_frame(csv_path):
+    df = pd.read_csv(csv_path)
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+        df = df.dropna(subset=["Date"]).sort_values("Date").reset_index(drop=True)
+        df["Date_obj"] = df["Date"].dt.date
+    return df
+
+def predict_from_context_frame(asset, context_df):
+    config = ASSET_CONFIG[asset]
+    st = state[asset]
+
+    cols_to_keep = list(dict.fromkeys(st["feature_cols"] + [config["target_col"]]))
+    numeric_df = context_df[cols_to_keep].copy()
+    abs_last_price = float(numeric_df.iloc[-1][config["target_col"]])
+    last_date = context_df.iloc[-1]["Date"].strftime("%Y-%m-%d")
+
+    returns_df = numeric_df.pct_change().replace([np.inf, -np.inf], np.nan).dropna()
+    lookback = st["lookback"]
+    if len(returns_df) < lookback:
+        return {"error": "Not enough data"}
+
+    recent_returns = returns_df[st["feature_cols"]].iloc[-lookback:].copy()
+    recent_scaled = st["x_scaler"].transform(recent_returns)
+    recent_tensor = torch.tensor(recent_scaled, dtype=torch.float32).unsqueeze(0).to(device)
+
+    with torch.no_grad():
+        pred_scaled = st["model"](recent_tensor).cpu().numpy().reshape(-1, 1)
+
+    pred_return = st["y_scaler"].inverse_transform(pred_scaled).item()
+    pred_abs = abs_last_price * (1 + pred_return)
+    return {
+        "predicted_price": round(float(pred_abs), 2),
+        "last_train_date": last_date,
+        "last_train_price": round(abs_last_price, 2),
+    }
+
+def build_precomputed_forecasts(asset):
+    config = ASSET_CONFIG[asset]
+    train_df = load_level_frame(config["train_csv"])
+    test_df = load_level_frame(config["test_csv"])
+    if test_df.empty:
+        return test_df, []
+
+    forecast_rows = []
+    context_df = train_df.copy()
+    for _, test_row in test_df.iterrows():
+        pred_info = predict_from_context_frame(asset, context_df)
+        if pred_info.get("error"):
+            raise ValueError(f"Unable to precompute forecasts for {asset}: {pred_info['error']}")
+
+        forecast_rows.append(
+            {
+                "date": test_row["Date"].strftime("%Y-%m-%d"),
+                "date_obj": test_row["Date_obj"],
+                "actual_price": round(float(test_row[config["target_col"]]), 2),
+                "predicted_price": pred_info["predicted_price"],
+                "context_end_date": pred_info["last_train_date"],
+                "context_end_price": pred_info["last_train_price"],
+            }
+        )
+        context_df = pd.concat([context_df, test_row.to_frame().T], ignore_index=True)
+
+    return test_df, forecast_rows
 
 def load_runtime_state():
     if not os.path.exists(STATE_FILE):
@@ -187,6 +297,8 @@ def load_models():
             meta = json.load(f)
         state[asset]["feature_cols"] = meta["feature_cols"]
         state[asset]["lookback"] = meta["lookback"]
+        state[asset]["data_split"] = dict(meta.get("data_split") or {})
+        state[asset]["model_seed"] = meta.get("seed")
         
         # Load Scalers
         with open(os.path.join(config["model_dir"], "x_scaler.pkl"), "rb") as f:
@@ -200,66 +312,48 @@ def load_models():
         model.to(device)
         model.eval()
         state[asset]["model"] = model
-        
-        # Init calendar to row 0 of test
-        test_df = pd.read_csv(config["test_csv"])
-        if "Date" in test_df.columns:
-            state[asset]["current_date"] = pd.to_datetime(test_df.iloc[0]["Date"]).date()
 
-load_models()
-load_runtime_state()
+        test_df, forecast_rows = build_precomputed_forecasts(asset)
+        state[asset]["test_df"] = test_df
+        state[asset]["forecast_rows"] = forecast_rows
+
+        train_df = load_level_frame(config["train_csv"])
+        live_split = dict(state[asset]["data_split"] or {})
+        live_split["raw_train_rows"] = int(len(train_df))
+        live_split["raw_test_rows"] = int(len(test_df))
+        if not train_df.empty and "Date_obj" in train_df.columns:
+            live_split["raw_train_last_date"] = str(train_df.iloc[-1]["Date_obj"])
+        if not test_df.empty and "Date_obj" in test_df.columns:
+            live_split["raw_test_first_date"] = str(test_df.iloc[0]["Date_obj"])
+            live_split["raw_test_last_date"] = str(test_df.iloc[-1]["Date_obj"])
+        state[asset]["data_split"] = live_split
+
+        if not test_df.empty and "Date_obj" in test_df.columns:
+            state[asset]["current_date"] = test_df.iloc[0]["Date_obj"]
 
 def predict_next_day(asset):
-    config = ASSET_CONFIG[asset]
     st = state[asset]
-    
-    df = pd.read_csv(config["train_csv"])
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"], errors='coerce')
-        df = df.dropna(subset=["Date"]).sort_values("Date").reset_index(drop=True)
-        
-    test_df = pd.read_csv(config["test_csv"])
-    if st["test_idx"] > 0:
-        simulated_test = test_df.iloc[:st["test_idx"]].copy()
-        if "Date" in simulated_test.columns:
-            simulated_test["Date"] = pd.to_datetime(simulated_test["Date"], errors='coerce')
-        df = pd.concat([df, simulated_test], ignore_index=True)
-        df = df.dropna(subset=["Date"]).sort_values("Date").reset_index(drop=True)
-    
-    cols_to_keep = list(dict.fromkeys(st["feature_cols"] + [config["target_col"]]))
-    numeric_df = df[cols_to_keep].copy()
-    
-    abs_last_price = numeric_df.iloc[-1][config["target_col"]]
-    last_date = df.iloc[-1]["Date"].strftime("%Y-%m-%d")
-    
-    returns_df = numeric_df.pct_change().replace([np.inf, -np.inf], np.nan).dropna()
-    
-    lookback = st["lookback"]
-    if len(returns_df) < lookback:
-        return {"error": "Not enough data"}
-        
-    recent_returns = returns_df[st["feature_cols"]].iloc[-lookback:].copy()
-    recent_scaled = st["x_scaler"].transform(recent_returns)
-    recent_tensor = torch.tensor(recent_scaled, dtype=torch.float32).unsqueeze(0).to(device)
-    
-    with torch.no_grad():
-        st["model"].eval()
-        pred_scaled = st["model"](recent_tensor).cpu().numpy().reshape(-1, 1)
-        
-    pred_return = st["y_scaler"].inverse_transform(pred_scaled).item()
-    pred_abs = abs_last_price * (1 + pred_return)
-    
+    idx = st["test_idx"]
+    forecast_rows = st.get("forecast_rows") or []
+    if idx >= len(forecast_rows):
+        return {"error": "No cached forecast available"}
+
+    row = forecast_rows[idx]
     return {
-        "predicted_price": round(pred_abs, 2),
-        "last_train_date": last_date,
-        "last_train_price": round(abs_last_price, 2)
+        "predicted_price": row["predicted_price"],
+        "last_train_date": row["context_end_date"],
+        "last_train_price": row["context_end_price"],
     }
 
 def get_test_dates(asset):
-    test_df = pd.read_csv(ASSET_CONFIG[asset]["test_csv"])
-    test_df["Date_obj"] = pd.to_datetime(test_df["Date"], errors="coerce").dt.date
-    test_df = test_df.dropna(subset=["Date_obj"]).reset_index(drop=True)
-    return test_df
+    cached_test_df = state[asset].get("test_df")
+    if cached_test_df is not None:
+        return cached_test_df.copy()
+    return load_level_frame(ASSET_CONFIG[asset]["test_csv"])
+
+
+load_models()
+load_runtime_state()
 
 @app.get("/")
 def get_dashboard():
@@ -277,37 +371,46 @@ def get_status(asset: str):
     test_df = get_test_dates(asset)
     if idx >= len(test_df):
         return {"error": "Simulation finished, no more test data"}
-        
+
+    min_date = test_df.iloc[0]["Date_obj"]
+    max_date = test_df.iloc[-1]["Date_obj"]
     market_date = test_df.iloc[idx]["Date_obj"]
     current_calendar_date = st["current_date"]
-    
+
+    reference_today = get_reference_today(asset)
+    effective_today = clamp_date_to_window(reference_today, min_date, max_date)
+    today_alignment_note = None
+    if reference_today < min_date:
+        today_alignment_note = (
+            f"Reference today is {reference_today}. This test window begins on {min_date}, "
+            f"so the dashboard is aligned to {effective_today}."
+        )
+    elif reference_today > max_date:
+        today_alignment_note = (
+            f"Reference today is {reference_today}. This test window ends on {max_date}, "
+            f"so the dashboard is aligned to {effective_today}."
+        )
+
     is_market_day = (current_calendar_date == market_date)
     
+    forecast_rows = st.get("forecast_rows") or []
     pred_info = {}
     if is_market_day:
         pred_info = predict_next_day(asset)
-        if pred_info.get("predicted_price"):
-            st["history"][str(current_calendar_date)] = pred_info["predicted_price"]
-            save_runtime_state()
     
     # Generate Rolling Metrics Log
     log_arr = []
     y_true = []
     y_pred = []
-    
-    for i in range(idx):
-        past_date = str(test_df.iloc[i]["Date_obj"])
-        actual_val = float(test_df.iloc[i][config["target_col"]])
-        pred_val = st["history"].get(past_date)
-        
-        if pred_val is not None:
-            y_true.append(actual_val)
-            y_pred.append(pred_val)
-            log_arr.append({
-                "date": past_date,
-                "actual": round(actual_val, 2),
-                "predicted": round(pred_val, 2)
-            })
+
+    for row in forecast_rows[:idx]:
+        y_true.append(float(row["actual_price"]))
+        y_pred.append(float(row["predicted_price"]))
+        log_arr.append({
+            "date": row["date"],
+            "actual": round(float(row["actual_price"]), 2),
+            "predicted": round(float(row["predicted_price"]), 2)
+        })
             
     # Calculate Rolling metrics
     rolling_rmse = None
@@ -330,12 +433,21 @@ def get_status(asset: str):
         
     return {
         "asset": asset,
+        "dataset_label": config.get("dataset_label"),
+        "model_seed": st.get("model_seed"),
+        "data_split": st.get("data_split"),
         "simulation_day": idx,
         "current_date": str(current_calendar_date),
-        "min_date": str(test_df.iloc[0]["Date_obj"]),
-        "max_date": str(test_df.iloc[-1]["Date_obj"]),
+        "min_date": str(min_date),
+        "max_date": str(max_date),
+        "test_row_count": int(len(test_df)),
+        "prediction_mode": "precomputed_frozen_model",
+        "reference_today": str(reference_today),
+        "effective_today": str(effective_today),
+        "today_alignment_note": today_alignment_note,
         "is_market_day": is_market_day,
         "predicted_price": pred_info.get("predicted_price"),
+        "last_train_date": pred_info.get("last_train_date"),
         "yesterday_date": yesterday_date,
         "yesterday_actual": yesterday_actual,
         "yesterday_pred": yesterday_pred,
@@ -364,9 +476,9 @@ def next_day(asset: str):
     
     if current_calendar_date == market_date:
         st["test_idx"] += 1
-        message = "Assimilated market day sequence (Frozen Weights preserved)."
+        message = "Advanced to the next precomputed market day. Model weights and forecasts remain frozen."
     else:
-        message = "Advanced non-market day."
+        message = "Advanced non-market day. Frozen forecasts were unchanged."
         
     st["current_date"] = current_calendar_date + datetime.timedelta(days=1)
     save_runtime_state()
@@ -382,7 +494,6 @@ def set_current_date(asset: str, date: str):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Date must use YYYY-MM-DD format.") from exc
 
-    st = state[asset]
     test_df = get_test_dates(asset)
 
     min_date = test_df.iloc[0]["Date_obj"]
@@ -393,20 +504,37 @@ def set_current_date(asset: str, date: str):
             detail=f"Date must be between {min_date} and {max_date}."
         )
 
-    new_test_idx = int((test_df["Date_obj"] < selected_date).sum())
-    st["current_date"] = selected_date
-    st["test_idx"] = new_test_idx
-    st["history"] = {
-        logged_date: pred
-        for logged_date, pred in st["history"].items()
-        if datetime.date.fromisoformat(logged_date) < selected_date
-    }
-    save_runtime_state()
+    state_update = set_simulation_date_state(asset, selected_date)
 
     return {
         "message": "Simulation date updated.",
-        "current_date": str(st["current_date"]),
-        "simulation_day": st["test_idx"]
+        **state_update
+    }
+
+@app.post("/api/use_today/{asset}")
+def use_reference_today(asset: str):
+    if asset not in ASSET_CONFIG:
+        return {"error": "Invalid asset"}
+
+    test_df = get_test_dates(asset)
+    min_date = test_df.iloc[0]["Date_obj"]
+    max_date = test_df.iloc[-1]["Date_obj"]
+    requested_today = get_reference_today(asset)
+    effective_today = clamp_date_to_window(requested_today, min_date, max_date)
+    state_update = set_simulation_date_state(asset, effective_today)
+
+    message = "Dashboard aligned to the reference today."
+    if effective_today != requested_today:
+        message = (
+            f"Reference today is {requested_today}, so the dashboard was aligned to the "
+            f"nearest available test date {effective_today}."
+        )
+
+    return {
+        "message": message,
+        "requested_today": str(requested_today),
+        "effective_today": str(effective_today),
+        **state_update
     }
 
 if __name__ == "__main__":

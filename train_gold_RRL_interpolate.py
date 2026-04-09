@@ -38,29 +38,41 @@ if device.type == "cuda":
 else:
     logging.warning("No GPU found. Training will bottleneck on CPU.")
 
+
+def parse_int_list_env(env_name: str, default_values):
+    raw = os.getenv(env_name, "").strip()
+    if not raw:
+        return list(default_values)
+    return [int(part.strip()) for part in raw.split(",") if part.strip()]
+
 # =========================
 # 2) User Inputs
 # =========================
-CLEAN_DF_PATH = "gold_RRL_interpolate_train.csv"
-TARGET_COL = "Gold_Futures"
-DATE_COL = "Date"
-HORIZON = 1
-OUTER_TRAIN_RATIO = 0.80
-FINAL_VAL_RATIO_WITHIN_OUTER_TRAIN = 0.10
-TUNING_SEED = 42
-N_SPLITS_WALK_FORWARD = 5
-INIT_POINTS = 15
-N_ITER = 40
-FINAL_SEEDS = [0, 1, 2, 42, 99, 123]
-MAX_EPOCHS_TUNING = 50
-MAX_EPOCHS_FINAL = 50
-EARLY_STOPPING_PATIENCE = 5
-EARLY_STOPPING_MIN_DELTA = 1e-4
+CLEAN_DF_PATH = os.getenv("GOLD_CLEAN_DF_PATH", "gold_RRL_interpolate_train.csv")
+TARGET_COL = os.getenv("GOLD_TARGET_COL", "Gold_Futures")
+DATE_COL = os.getenv("GOLD_DATE_COL", "Date")
+HORIZON = int(os.getenv("GOLD_HORIZON", "1"))
+OUTER_TRAIN_RATIO = float(os.getenv("GOLD_OUTER_TRAIN_RATIO", "0.80"))
+FINAL_VAL_RATIO_WITHIN_OUTER_TRAIN = float(os.getenv("GOLD_FINAL_VAL_RATIO", "0.10"))
+TUNING_SEED = int(os.getenv("GOLD_TUNING_SEED", "42"))
+N_SPLITS_WALK_FORWARD = int(os.getenv("GOLD_N_SPLITS_WALK_FORWARD", "5"))
+INIT_POINTS = int(os.getenv("GOLD_INIT_POINTS", "15"))
+N_ITER = int(os.getenv("GOLD_N_ITER", "40"))
+FINAL_SEEDS = parse_int_list_env("GOLD_FINAL_SEEDS", [0, 1, 2, 42, 99, 123])
+MAX_EPOCHS_TUNING = int(os.getenv("GOLD_MAX_EPOCHS_TUNING", "50"))
+MAX_EPOCHS_FINAL = int(os.getenv("GOLD_MAX_EPOCHS_FINAL", "50"))
+EARLY_STOPPING_PATIENCE = int(os.getenv("GOLD_EARLY_STOPPING_PATIENCE", "5"))
+EARLY_STOPPING_MIN_DELTA = float(os.getenv("GOLD_EARLY_STOPPING_MIN_DELTA", "1e-4"))
+TRAIN_END_DATE = os.getenv("GOLD_TRAIN_END_DATE")
+EXPORT_DATE_SPLITS = os.getenv("GOLD_EXPORT_DATE_SPLITS", "1") != "0"
 
-SAVE_ALL_SEED_MODELS = True
-SAVE_ROOT_DIR = "models/gold_RRL_interpolate"
-REPORTS_DIR = "reports/gold_RRL_interpolate"
+SAVE_ALL_SEED_MODELS = os.getenv("GOLD_SAVE_ALL_SEED_MODELS", "1") != "0"
+SAVE_ROOT_DIR = os.getenv("GOLD_SAVE_ROOT_DIR", "models/gold_RRL_interpolate")
+REPORTS_DIR = os.getenv("GOLD_REPORTS_DIR", "reports/gold_RRL_interpolate")
 PLOTS_DIR = os.path.join(REPORTS_DIR, "plots")
+DATASET_BASENAME = os.path.splitext(os.path.basename(CLEAN_DF_PATH))[0]
+TRAIN_SPLIT_EXPORT_PATH = os.getenv("GOLD_TRAIN_SPLIT_EXPORT_PATH", f"{DATASET_BASENAME}_train.csv")
+TEST_SPLIT_EXPORT_PATH = os.getenv("GOLD_TEST_SPLIT_EXPORT_PATH", f"{DATASET_BASENAME}_test.csv")
 
 PBOUNDS = {
     "lookback": (10, 60),
@@ -105,6 +117,7 @@ if TARGET_COL not in numeric_cols:
     raise ValueError("Target must be numeric.")
 
 df = df[numeric_cols].copy()
+level_df = df.copy()
 
 ABS_P_T = "P_t_abs"
 df[ABS_P_T] = df[TARGET_COL]
@@ -123,9 +136,84 @@ df = returns_df.dropna().copy()
 # =========================
 # 5) Chronological Outer Split
 # =========================
-outer_train_size = int(len(df) * OUTER_TRAIN_RATIO)
-df_train_outer = df.iloc[:outer_train_size].copy().reset_index(drop=True)
-df_test = df.iloc[outer_train_size:].copy().reset_index(drop=True)
+split_summary = {
+    "source_path": CLEAN_DF_PATH,
+    "target_col": TARGET_COL,
+    "horizon": HORIZON,
+}
+
+if TRAIN_END_DATE:
+    split_cutoff = pd.Timestamp(TRAIN_END_DATE)
+    if DATE_COL is None or not isinstance(df.index, pd.DatetimeIndex):
+        raise ValueError("GOLD_TRAIN_END_DATE requires a valid datetime index based on DATE_COL.")
+
+    if split_cutoff <= df.index.min():
+        raise ValueError(
+            f"GOLD_TRAIN_END_DATE must be later than the first model row date {df.index.min().date()}."
+        )
+    if split_cutoff > level_df.index.max():
+        raise ValueError(
+            f"GOLD_TRAIN_END_DATE must be on or before the last level date {level_df.index.max().date()}."
+        )
+
+    if EXPORT_DATE_SPLITS:
+        level_train = level_df.loc[level_df.index <= split_cutoff].reset_index()
+        level_test = level_df.loc[level_df.index > split_cutoff].reset_index()
+        level_train.to_csv(TRAIN_SPLIT_EXPORT_PATH, index=False)
+        level_test.to_csv(TEST_SPLIT_EXPORT_PATH, index=False)
+        logging.info(
+            f"Exported date split files using cutoff {split_cutoff.date()}: "
+            f"{TRAIN_SPLIT_EXPORT_PATH} ({len(level_train)} rows), "
+            f"{TEST_SPLIT_EXPORT_PATH} ({len(level_test)} rows)"
+        )
+
+    # Each row predicts t+1, so rows dated on the cutoff predict beyond the cutoff.
+    # Keep model-train rows strictly before the requested cutoff to avoid leakage.
+    train_mask = df.index < split_cutoff
+    test_mask = df.index >= split_cutoff
+
+    if not train_mask.any() or not test_mask.any():
+        raise ValueError(
+            f"Date split at {split_cutoff.date()} produced an empty train or test partition "
+            f"after return/target construction."
+        )
+
+    df_train_outer = df.loc[train_mask].copy().reset_index(drop=True)
+    df_test = df.loc[test_mask].copy().reset_index(drop=True)
+    split_summary.update(
+        {
+            "split_mode": "date_cutoff",
+            "requested_train_end_date": str(split_cutoff.date()),
+            "raw_train_rows": int((level_df.index <= split_cutoff).sum()),
+            "raw_test_rows": int((level_df.index > split_cutoff).sum()),
+            "model_train_rows": int(train_mask.sum()),
+            "model_test_rows": int(test_mask.sum()),
+            "model_train_last_input_date": str(df.index[train_mask].max().date()),
+            "model_test_first_input_date": str(df.index[test_mask].min().date()),
+            "split_note": (
+                "Because horizon=1, rows dated on the requested cutoff predict the next date "
+                "and are assigned to test."
+            ),
+        }
+    )
+    logging.info(
+        f"Using date cutoff split at {split_cutoff.date()}: "
+        f"model_train_rows={train_mask.sum()}, model_test_rows={test_mask.sum()}, "
+        f"train_last_input_date={df.index[train_mask].max().date()}, "
+        f"test_first_input_date={df.index[test_mask].min().date()}"
+    )
+else:
+    outer_train_size = int(len(df) * OUTER_TRAIN_RATIO)
+    df_train_outer = df.iloc[:outer_train_size].copy().reset_index(drop=True)
+    df_test = df.iloc[outer_train_size:].copy().reset_index(drop=True)
+    split_summary.update(
+        {
+            "split_mode": "ratio",
+            "outer_train_ratio": OUTER_TRAIN_RATIO,
+            "model_train_rows": int(len(df_train_outer)),
+            "model_test_rows": int(len(df_test)),
+        }
+    )
 
 feature_cols = [col for col in df_train_outer.columns if col not in [MODEL_TARGET_COL, ABS_TARGET_COL, ABS_P_T]]
 
@@ -492,6 +580,11 @@ os.makedirs(SAVE_ROOT_DIR, exist_ok=True)
 os.makedirs(REPORTS_DIR, exist_ok=True)
 os.makedirs(PLOTS_DIR, exist_ok=True)
 
+split_summary_path = os.path.join(REPORTS_DIR, "data_split_summary.json")
+with open(split_summary_path, "w", encoding="utf-8") as f:
+    json.dump(split_summary, f, indent=4)
+logging.info(f"Saved split summary to {split_summary_path}")
+
 # =========================
 # 17) Train Final Seeds
 # =========================
@@ -568,7 +661,13 @@ for seed in FINAL_SEEDS:
             y_scaler=scaler_y_final, feature_cols=feature_cols,
             target_col=MODEL_TARGET_COL, lookback=best_params["lookback"],
             model_name=f"cnn_bilstm_seed{seed}.pth",
-            extra_metadata={"seed": seed, "rmse_test": float(rmse), "r2_test": float(r2), "best_epoch": int(best_epoch)}
+            extra_metadata={
+                "seed": seed,
+                "rmse_test": float(rmse),
+                "r2_test": float(r2),
+                "best_epoch": int(best_epoch),
+                "data_split": split_summary,
+            }
         )
 
 final_results_df = pd.DataFrame(final_results)
