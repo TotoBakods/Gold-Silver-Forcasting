@@ -219,7 +219,7 @@
         .yesterday-stats {
             display: flex;
             justify-content: space-between;
-            align-items: flex-end;
+            align-items: flex-start;
             margin-top: 1rem;
             border-bottom: 1px solid var(--card-border);
             padding-bottom: 1rem;
@@ -228,6 +228,12 @@
         .stat-group {
             display: flex;
             flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .stat-group.right-aligned {
+            align-items: flex-end;
+            text-align: right;
         }
 
         .stat-value {
@@ -333,6 +339,10 @@
             font-size: 0.85rem;
         }
 
+        th.text-right, td.text-right {
+            text-align: right;
+        }
+
         td {
             padding: 1rem;
             border-bottom: 1px solid rgba(255, 255, 255, 0.02);
@@ -436,7 +446,7 @@
                         <span class="price-label">Actual Close</span>
                         <span class="stat-value" id="yest-actual">--</span>
                     </div>
-                    <div class="stat-group" style="align-items: flex-end;">
+                    <div class="stat-group right-aligned">
                         <span class="price-label">Model Prediction</span>
                         <span class="stat-value" id="yest-pred" style="color: var(--text-muted);">--</span>
                     </div>
@@ -491,8 +501,8 @@
                     <thead>
                         <tr>
                             <th>Date</th>
-                            <th>Actual Price</th>
-                            <th>Predicted Price</th>
+                            <th class="text-right">Actual Price</th>
+                            <th class="text-right">Predicted Price</th>
                         </tr>
                     </thead>
                     <tbody id="history-body">
@@ -585,10 +595,18 @@
             } else {
                 // The log from the API places newest at index 0. We reverse it for chronologically correct plotting.
                 const chronoLog = [...historyLog].reverse();
+                const actualSeries = chronoLog.map(r => r.actual);
+                const predictedSeries = chronoLog.map(r => r.predicted);
+
+                // Align the prediction horizon with the actual date bucket on the plot.
+                // The current forecast stream is one step delayed relative to actual closes.
+                const alignedPredictedSeries = predictedSeries.map((_, idx) => (
+                    idx < predictedSeries.length - 1 ? predictedSeries[idx + 1] : null
+                ));
                 
                 mainChart.data.labels = chronoLog.map(r => r.date);
-                mainChart.data.datasets[0].data = chronoLog.map(r => r.actual);
-                mainChart.data.datasets[1].data = chronoLog.map(r => r.predicted);
+                mainChart.data.datasets[0].data = actualSeries;
+                mainChart.data.datasets[1].data = alignedPredictedSeries;
             }
             mainChart.update();
         }
@@ -660,8 +678,8 @@
                         const tr = document.createElement('tr');
                         tr.innerHTML = `
                             <td>${row.date}</td>
-                            <td class="cell-actual">$${row.actual.toFixed(2)}</td>
-                            <td class="cell-predicted">$${row.predicted.toFixed(2)}</td>
+                            <td class="cell-actual text-right">$${row.actual.toFixed(2)}</td>
+                            <td class="cell-predicted text-right">$${row.predicted.toFixed(2)}</td>
                         `;
                         tbody.appendChild(tr);
                     });
