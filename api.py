@@ -340,6 +340,7 @@ def predict_next_day(asset):
 
     row = forecast_rows[idx]
     return {
+        "forecast_date": row["date"],
         "predicted_price": row["predicted_price"],
         "last_train_date": row["context_end_date"],
         "last_train_price": row["context_end_price"],
@@ -357,7 +358,18 @@ load_runtime_state()
 
 @app.get("/")
 def get_dashboard():
-    return FileResponse("dashboard.html")
+    return FileResponse(
+        "dashboard.html",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
+
+@app.get("/dashboard")
+def get_dashboard_alias():
+    return get_dashboard()
 
 @app.get("/api/status/{asset}")
 def get_status(asset: str):
@@ -394,9 +406,7 @@ def get_status(asset: str):
     is_market_day = (current_calendar_date == market_date)
     
     forecast_rows = st.get("forecast_rows") or []
-    pred_info = {}
-    if is_market_day:
-        pred_info = predict_next_day(asset)
+    pred_info = predict_next_day(asset)
     
     # Generate Rolling Metrics Log
     log_arr = []
@@ -446,6 +456,7 @@ def get_status(asset: str):
         "effective_today": str(effective_today),
         "today_alignment_note": today_alignment_note,
         "is_market_day": is_market_day,
+        "forecast_date": pred_info.get("forecast_date"),
         "predicted_price": pred_info.get("predicted_price"),
         "last_train_date": pred_info.get("last_train_date"),
         "yesterday_date": yesterday_date,

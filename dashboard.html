@@ -466,13 +466,18 @@
 
             <!-- Today Card -->
             <div class="card today">
-                <h3>Today's Forecast</h3>
+                <h3>Next Market Forecast</h3>
                 <div class="price-display" id="today-pred" style="color: var(--primary);">--</div>
                 <div style="font-size: 0.95rem; color: var(--text-muted); line-height: 1.6;">
-                    Model inference computed using best Optuna parameters applied to previous market contexts. Actual closing price is currently withheld.
+                    Model inference uses the latest available market context. The actual close appears in the log on the next market day.
                 </div>
                 
                 <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--card-border);">
+                    <span class="price-label">Forecast Target Date:</span>
+                    <div style="font-weight: 600; margin-top: 0.5rem;" id="forecast-date">--</div>
+                </div>
+
+                <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--card-border);">
                     <span class="price-label">Model Predicts Based on Sequence Ending:</span>
                     <div style="font-weight: 600; margin-top: 0.5rem;" id="last-train-date">--</div>
                 </div>
@@ -519,7 +524,7 @@
     </div>
 
     <script>
-        const API_BASE = 'http://localhost:8000/api';
+        const API_BASE = '/api';
         let currentAsset = 'gold';
         let mainChart = null;
 
@@ -547,7 +552,7 @@
                             borderColor: '#ffffff',
                             backgroundColor: 'rgba(255, 255, 255, 0.1)',
                             borderWidth: 2,
-                            tension: 0.4,
+                            tension: 0,
                             pointRadius: 0,
                             pointHoverRadius: 6
                         },
@@ -558,7 +563,7 @@
                             backgroundColor: 'transparent',
                             borderWidth: 2,
                             borderDash: [5, 5],
-                            tension: 0.4,
+                            tension: 0,
                             pointRadius: 0,
                             pointHoverRadius: 6
                         }
@@ -583,31 +588,38 @@
             });
         }
 
-        function updateChart(historyLog) {
+        function updateChart(historyLog, forecastDate = null, forecastPred = null) {
             if (!mainChart) initChart();
             
             mainChart.data.datasets[1].borderColor = currentAsset === 'gold' ? '#ffd700' : '#4ecca3';
-            
-            if (!historyLog || historyLog.length === 0) {
-                mainChart.data.labels = [];
-                mainChart.data.datasets[0].data = [];
-                mainChart.data.datasets[1].data = [];
-            } else {
+
+            let labels = [];
+            let actualSeries = [];
+            let predictedSeries = [];
+
+            if (historyLog && historyLog.length > 0) {
                 // The log from the API places newest at index 0. We reverse it for chronologically correct plotting.
                 const chronoLog = [...historyLog].reverse();
-                const actualSeries = chronoLog.map(r => r.actual);
-                const predictedSeries = chronoLog.map(r => r.predicted);
-
-                // Align the prediction horizon with the actual date bucket on the plot.
-                // The current forecast stream is one step delayed relative to actual closes.
-                const alignedPredictedSeries = predictedSeries.map((_, idx) => (
-                    idx < predictedSeries.length - 1 ? predictedSeries[idx + 1] : null
-                ));
-                
-                mainChart.data.labels = chronoLog.map(r => r.date);
-                mainChart.data.datasets[0].data = actualSeries;
-                mainChart.data.datasets[1].data = alignedPredictedSeries;
+                labels = chronoLog.map(r => r.date);
+                actualSeries = chronoLog.map(r => r.actual);
+                predictedSeries = chronoLog.map(r => r.predicted);
             }
+
+            // Keep the chart current by appending the active forecast target point
+            // even before actual close is available.
+            if (forecastDate && forecastPred !== null && forecastPred !== undefined) {
+                if (labels[labels.length - 1] !== forecastDate) {
+                    labels.push(forecastDate);
+                    actualSeries.push(null);
+                    predictedSeries.push(forecastPred);
+                } else {
+                    predictedSeries[predictedSeries.length - 1] = forecastPred;
+                }
+            }
+
+            mainChart.data.labels = labels;
+            mainChart.data.datasets[0].data = actualSeries;
+            mainChart.data.datasets[1].data = predictedSeries;
             mainChart.update();
         }
 
@@ -631,13 +643,15 @@
                     : `Reference today is ${data.reference_today}. Predictions can only use dates inside ${data.min_date} to ${data.max_date}.`;
                 document.getElementById('today-alignment-note').innerText = todayNote;
                 
-                if (data.is_market_day) {
-                    const pred = data.predicted_price;
-                    document.getElementById('today-pred').innerText = pred ? `$${pred.toFixed(2)}` : '--';
+                const pred = data.predicted_price;
+                if (pred !== null && pred !== undefined) {
+                    document.getElementById('today-pred').innerText = `$${pred.toFixed(2)}`;
                     document.getElementById('today-pred').style.color = "var(--primary)";
+                    document.getElementById('forecast-date').innerText = data.forecast_date || '--';
                 } else {
                     document.getElementById('today-pred').innerText = 'MARKET CLOSED';
                     document.getElementById('today-pred').style.color = "var(--text-muted)";
+                    document.getElementById('forecast-date').innerText = '--';
                 }
                 
                 if(data.yesterday_actual && data.yesterday_pred) {
@@ -687,7 +701,11 @@
                     tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Awaiting Simulation Data...</td></tr>';
                 }
 
-                updateChart(data.history_log);
+                updateChart(
+                    data.history_log,
+                    data.forecast_date,
+                    data.predicted_price
+                );
                 
             } catch(e) {
                 console.error(e);
