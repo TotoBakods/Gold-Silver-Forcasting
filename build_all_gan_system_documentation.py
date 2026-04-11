@@ -24,25 +24,26 @@ OUTPUT_HTML = REPORT_ROOT / "GAN_Model.html"
 ALIAS_OUTPUTS = [
     REPORT_ROOT / "all_gan_system_documentation.html",
     ROOT / "reports" / "df_gold_dataset_gepu_datecut_full" / "gold_gan_system_documentation.html",
+    ROOT / "system_documentation.html",
 ]
 
 FORECAST_CONFIG = {
     "gold": {
-        "label": "GEPU Extended Date-Cut Model",
+        "label": "GEPU Extended Train-Only Retrained Model",
         "train_csv": ROOT / "df_gold_dataset_gepu_extended_train.csv",
         "test_csv": ROOT / "df_gold_dataset_gepu_extended_test.csv",
         "extended_csv": ROOT / "df_gold_dataset_gepu_extended.csv",
-        "model_dir": ROOT / "models" / "df_gold_dataset_gepu_datecut_full" / "seed_99",
-        "params_path": ROOT / "reports" / "df_gold_dataset_gepu_datecut_full" / "gold_best_params_optimized.json",
-        "report_dir": ROOT / "reports" / "df_gold_dataset_gepu_datecut_full",
+        "model_dir": ROOT / "models" / "gold_train_only_retrained" / "seed_99",
+        "params_path": ROOT / "reports" / "gold_train_only_retrained" / "gold_best_params_optimized.json",
+        "report_dir": ROOT / "reports" / "gold_train_only_retrained",
         "target_col": "Gold_Futures",
         "plot_name": "gold_seed_99_predictions.png",
         "eval_prefix": "gold",
     },
     "silver": {
-        "label": "Baseline Silver Model",
-        "train_csv": ROOT / "silver_RRL_interpolate_train.csv",
-        "test_csv": None,
+        "label": "Silver Extended Model (Real + Synthetic Horizon)",
+        "train_csv": ROOT / "silver_RRL_interpolate_extended_train.csv",
+        "test_csv": ROOT / "silver_RRL_interpolate_extended_test.csv",
         "extended_csv": ROOT / "silver_RRL_interpolate_extended.csv",
         "model_dir": ROOT / "models" / "silver_RRL_interpolate" / "seed_42",
         "params_path": ROOT / "reports" / "silver_RRL_interpolate" / "silver_yahoo_best_params.json",
@@ -75,6 +76,63 @@ REFERENCE_LINKS = [
         "Supports GAN-generated financial data as augmentation for downstream forecasting experiments.",
     ),
 ]
+
+TRAINING_RUNS = {
+    "gold": [
+        {
+            "label": "Current API deployment",
+            "status": "deployed",
+            "train_source": "df_gold_dataset_gepu_extended_train.csv",
+            "split_path": ROOT / "reports" / "gold_train_only_retrained" / "data_split_summary.json",
+            "params_path": ROOT / "reports" / "gold_train_only_retrained" / "gold_best_params_optimized.json",
+            "results_csv": ROOT / "reports" / "gold_train_only_retrained" / "gold_final_seed_results_optimized.csv",
+            "artifact_dir": ROOT / "models" / "gold_train_only_retrained",
+            "note": "This is the train-only gold retrain currently used by the dashboard and API.",
+        },
+        {
+            "label": "Second-pass longer-training experiment",
+            "status": "tested_not_deployed",
+            "train_source": "df_gold_dataset_gepu_extended_train.csv",
+            "split_path": ROOT / "reports" / "gold_train_only_retrained_v2" / "data_split_summary.json",
+            "params_path": ROOT / "reports" / "gold_train_only_retrained_v2" / "gold_best_params_optimized.json",
+            "results_csv": ROOT / "reports" / "gold_train_only_retrained_v2" / "gold_final_seed_results_optimized.csv",
+            "artifact_dir": ROOT / "models" / "gold_train_only_retrained_v2",
+            "note": "A narrower second-pass search with longer training and more seeds. Kept for comparison, not switched into the API here.",
+        },
+    ],
+    "silver": [
+        {
+            "label": "Current API deployment",
+            "status": "deployed",
+            "train_source": "silver_RRL_interpolate_extended_train.csv",
+            "split_path": None,
+            "params_path": ROOT / "reports" / "silver_RRL_interpolate" / "silver_yahoo_best_params.json",
+            "results_csv": ROOT / "reports" / "silver_RRL_interpolate" / "silver_yahoo_final_seed_results.csv",
+            "artifact_dir": ROOT / "models" / "silver_RRL_interpolate",
+            "note": "This is the strongest silver checkpoint kept in production after retrain experiments were compared.",
+        },
+        {
+            "label": "First train-only retrain experiment",
+            "status": "tested_not_deployed",
+            "train_source": "silver_RRL_interpolate_extended_train.csv",
+            "split_path": ROOT / "reports" / "silver_train_only_retrained" / "data_split_summary.json",
+            "params_path": ROOT / "reports" / "silver_train_only_retrained" / "silver_best_params_optimized.json",
+            "results_csv": ROOT / "reports" / "silver_train_only_retrained" / "silver_final_seed_results_optimized.csv",
+            "artifact_dir": ROOT / "models" / "silver_train_only_retrained",
+            "note": "A broader train-only silver retrain. It is documented here but was not promoted into the API.",
+        },
+        {
+            "label": "Second-pass longer-training experiment",
+            "status": "tested_not_deployed",
+            "train_source": "silver_RRL_interpolate_extended_train.csv",
+            "split_path": ROOT / "reports" / "silver_train_only_retrained_v2" / "data_split_summary.json",
+            "params_path": ROOT / "reports" / "silver_train_only_retrained_v2" / "silver_best_params_optimized.json",
+            "results_csv": ROOT / "reports" / "silver_train_only_retrained_v2" / "silver_final_seed_results_optimized.csv",
+            "artifact_dir": ROOT / "models" / "silver_train_only_retrained_v2",
+            "note": "A more targeted silver rerun with longer tuning and more seeds. It remained experimental because it did not clearly justify a production swap in this workflow.",
+        },
+    ],
+}
 
 
 class CNN_BiLSTM(nn.Module):
@@ -221,6 +279,67 @@ def safe_subset_metrics(eval_df: pd.DataFrame, label: str):
         "r2": r2_value,
         "directional_accuracy": round(float(eval_df["direction_match"].mean()) * 100.0, 2),
     }
+
+
+def load_training_runs(asset: str):
+    rows = []
+    for run in TRAINING_RUNS.get(asset, []):
+        params = read_json(run["params_path"]) if run["params_path"] and run["params_path"].exists() else {}
+        split_summary = read_json(run["split_path"]) if run["split_path"] and run["split_path"].exists() else {}
+        results_df = pd.read_csv(run["results_csv"]) if run["results_csv"].exists() else pd.DataFrame()
+        best_seed = "n/a"
+        best_rmse = "n/a"
+        best_r2 = "n/a"
+        seed_count = 0
+        if not results_df.empty and "rmse_test" in results_df.columns:
+            results_df = results_df.copy()
+            results_df["rmse_test"] = pd.to_numeric(results_df["rmse_test"], errors="coerce")
+            results_df["r2_test"] = pd.to_numeric(results_df.get("r2_test"), errors="coerce")
+            best_row = results_df.loc[results_df["rmse_test"].idxmin()]
+            best_seed = int(best_row["seed"])
+            best_rmse = round(float(best_row["rmse_test"]), 4)
+            best_r2 = round(float(best_row["r2_test"]), 4) if pd.notna(best_row["r2_test"]) else "n/a"
+            seed_count = int(results_df["seed"].nunique())
+
+        rows.append(
+            {
+                "Run": run["label"],
+                "Status": run["status"],
+                "Train source": run["train_source"],
+                "Split mode": split_summary.get("split_mode", "n/a"),
+                "Model-train rows": split_summary.get("model_train_rows", "n/a"),
+                "Model-test rows": split_summary.get("model_test_rows", "n/a"),
+                "Seed count": seed_count if seed_count else "n/a",
+                "Best seed": best_seed,
+                "Best internal RMSE": best_rmse,
+                "Best internal R2": best_r2,
+                "Lookback": params.get("lookback", "n/a"),
+                "Filters": params.get("filters", "n/a"),
+                "Kernel": params.get("kernel_size", "n/a"),
+                "LSTM units": params.get("lstm_units", "n/a"),
+                "Dense units": params.get("dense_units", "n/a"),
+                "Dropout": round(float(params["dropout_rate"]), 4) if "dropout_rate" in params else "n/a",
+                "Learning rate": round(float(params["learning_rate"]), 8) if "learning_rate" in params else "n/a",
+                "Batch size": params.get("batch_size", "n/a"),
+                "Artifacts": str(run["artifact_dir"].relative_to(ROOT)),
+                "Note": run["note"],
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def workflow_html(asset: str):
+    forecast_cfg = FORECAST_CONFIG[asset]
+    return (
+        "<ol>"
+        "<li>The process begins with the observed multivariate source panel, which is transformed into a business-day-aligned and fully imputed dataset suitable for generative modelling.</li>"
+        "<li>Multiple GAN seeds and candidate continuations are then estimated and assessed with respect to return-distribution fidelity, autocorrelation preservation, and cross-feature dependence structure.</li>"
+        "<li>The selected continuation is appended to the observed history, thereby producing the extended dataset used in downstream forecasting experiments.</li>"
+        "<li>CNN-BiLSTM forecasting models are trained exclusively on the designated train CSV; the dashboard test CSV is excluded from the train-only retraining studies documented here.</li>"
+        f"<li>The currently deployed frozen forecaster is loaded from <span class='mono'>{html.escape(str(forecast_cfg['model_dir'].relative_to(ROOT)))}</span>, after which predictions are precomputed against the untouched dashboard test CSV.</li>"
+        "<li>These frozen predictions are subsequently exposed through the API and dashboard, such that date advancement traverses a precomputed prediction tape rather than initiating online retraining.</li>"
+        "</ol>"
+    )
 
 
 def make_eval_plot(eval_df: pd.DataFrame, output_path: Path, title: str):
@@ -564,6 +683,7 @@ def build_asset_section(dataset_cfg: dict, eval_bundle: dict):
             safe_subset_metrics(eval_df.loc[eval_df["is_synthetic_actual"]].copy(), "GAN-generated rows not used in forecast training"),
         ]
     )
+    training_runs_df = load_training_runs(asset)
 
     quality_cls = "ok" if selected_metrics["quality_label"] == "good" else ("warn" if selected_metrics["quality_label"] == "usable_with_caution" else "danger")
     readiness_text = "READY" if thresholds_df["Pass"].eq("Yes").all() and selected_metrics["quality_label"] != "reject" else "NOT_READY"
@@ -588,7 +708,9 @@ def build_asset_section(dataset_cfg: dict, eval_bundle: dict):
     <div class="metric-card"><div class="label">Forecast eval rows</div><div class="value">{forecast_metrics["test_rows"]}</div></div>
     <div class="metric-card"><div class="label">Synthetic rows in eval</div><div class="value">{forecast_metrics["synthetic_rows_in_eval"]}</div></div>
   </div>
-  <p>This section covers the current configured GAN dataset <span class="mono">{dataset_cfg["name"]}</span> and the frozen forecasting model attached to the <span class="mono">{asset}</span> pipeline. It separates the observed history, the GAN-generated extension, the part used in forecast training, and the part left unused for prediction-only evaluation.</p>
+  <p>This section documents the currently selected GAN dataset <span class="mono">{dataset_cfg["name"]}</span> together with the frozen forecasting model associated with the <span class="mono">{asset}</span> pipeline. The presentation distinguishes between the observed historical sample, the GAN-generated extension, the subset admitted to forecast training, and the rows reserved for prediction-only evaluation.</p>
+  <h3>Start-To-End Workflow</h3>
+  {workflow_html(asset)}
   <h3>Dataset Lifecycle</h3>
   {table_html(stage_df)}
   <h3>What Was Used For Forecast Training And What Was Not</h3>
@@ -617,6 +739,9 @@ def build_asset_section(dataset_cfg: dict, eval_bundle: dict):
   <h3>Frozen Forecast Model</h3>
   {table_html(model_df)}
   <p>Forecast features: <span class="mono">{", ".join(metadata["feature_cols"])}</span></p>
+  <h3>Forecast Training History</h3>
+  <p>The table below summarizes the train-only forecasting experiments and subsequent deployment choices linking the GAN-extended dataset to the current API output. Internal RMSE and R2 values are transcribed from each run's saved seed-results file.</p>
+  {table_html(training_runs_df)}
   {render_image(eval_bundle["forecast_cfg"]["report_dir"] / "plots" / eval_bundle["forecast_cfg"]["plot_name"], f"{asset.title()} original saved-model prediction plot.")}
   <h3>Prediction On Data Not Used In Forecast Training</h3>
   <div class="grid-4">
@@ -633,7 +758,7 @@ def build_asset_section(dataset_cfg: dict, eval_bundle: dict):
   {table_html(preview_df)}
   <h4>Top 10 Worst Absolute Errors</h4>
   {table_html(top_errors_df)}
-  <h3>Discussion And Validity Justification</h3>
+  <h3>Interpretation And Validity</h3>
   <ul>
     {''.join(f"<li>{html.escape(point)}</li>" for point in validity_points)}
   </ul>
@@ -648,16 +773,25 @@ def build_html(asset_sections: list[str], summary_df: pd.DataFrame):
     )
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GAN Model Documentation</title>
+<title>System Documentation</title>
 <style>
 body{{font-family:Arial,Helvetica,sans-serif;color:#111827;background:#fff;margin:0;line-height:1.55}} .page{{max-width:1220px;margin:0 auto;padding:28px 20px 60px}} h1,h2,h3,h4{{margin-top:0;color:#111827}} h1{{font-size:30px}} h2{{font-size:24px;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin-top:34px}} h3{{font-size:18px;margin-top:24px}} p,li{{font-size:15px}} .muted{{color:#4b5563}} .summary-box,.warning-box{{padding:16px 18px;margin:16px 0 24px;border:1px solid #d1d5db;background:#f9fafb}} .warning-box{{border-color:#f59e0b;background:#fffbeb}} .grid-4{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}} .metric-card{{border:1px solid #d1d5db;padding:14px;background:#fff}} .metric-card .label{{font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:.03em}} .metric-card .value{{font-size:24px;font-weight:700;margin-top:6px}} .badge{{display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700}} .badge.ok{{background:#dcfce7;color:#166534}} .badge.warn{{background:#fef3c7;color:#92400e}} .badge.danger{{background:#fee2e2;color:#991b1b}} .data-table{{width:100%;border-collapse:collapse;margin:12px 0 20px;font-size:14px}} .data-table th,.data-table td{{border:1px solid #d1d5db;padding:8px 10px;text-align:left;vertical-align:top}} .data-table th{{background:#f3f4f6}} .plot{{margin:18px 0 28px;border:1px solid #d1d5db;padding:12px;background:#fff}} .plot img{{width:100%;height:auto;display:block}} .plot figcaption{{margin-top:10px;color:#4b5563;font-size:14px}} .report-summary{{white-space:pre-wrap;background:#f9fafb;border:1px solid #d1d5db;padding:12px;font-size:13px;overflow-x:auto}} .mono{{font-family:Consolas,Menlo,monospace}} .small{{font-size:13px}} .missing-asset{{border:1px dashed #9ca3af;padding:16px;color:#6b7280;margin:16px 0}} @media (max-width:900px){{.grid-4{{grid-template-columns:1fr}}}}
 </style></head><body><div class="page">
-<h1>GAN Model Documentation</h1>
-<p class="muted">This file supersedes the old gold-only HTML and combines the current gold and silver GAN pipelines into one readable report. It explains why GAN is being used in this forecasting system, what each GAN produced, what the forecasters were trained on, what was left out of training, and how the predictions behaved on the unused data.</p>
-<div class="summary-box"><strong>System-level interpretation.</strong> In this repo, GANs are scenario builders and dataset extenders, not the final forecasting models. They create future-dated multivariate panels so the downstream CNN-BiLSTM forecasters can be evaluated on longer horizons. A GAN run is considered valid here when the extended file is structurally sound and the selected candidate preserves return-space distribution, autocorrelation, and cross-feature correlation closely enough to pass the repo thresholds.</div>
-<h2>Why GAN Is Used In This System</h2>
-<ul><li>The forecasters consume multiple interacting market and macro variables, not only one target series.</li><li>The training pipelines operate in return space, so synthetic data should preserve return distributions and dependence structure rather than only smooth price levels.</li><li>Simple interpolation is usually too smooth for financial time series and does not preserve cross-feature joint behavior.</li><li>GANs are being used here as multivariate future panel generators for augmentation, synthetic holdouts, and dashboard simulations.</li></ul>
-<div class="warning-box"><strong>Important boundary.</strong> Good synthetic behavior does not automatically prove real-market forecasting skill. In the sections below, any evaluation rows marked as GAN-generated are synthetic actuals. They support internal validation and simulation, not real-market performance claims.</div>
+<h1>System Documentation</h1>
+<p class="muted">This document serves as the current end-to-end technical record for the repository. It consolidates source preparation, GAN-based dataset extension, train-only forecasting experiments, frozen deployed models, and the outputs exposed through the dashboard and API for both gold and silver.</p>
+<div class="summary-box"><strong>System-level interpretation.</strong> Within this project, GANs function as scenario-generation and dataset-extension mechanisms rather than as the final forecasting models themselves. Their role is to construct future-dated multivariate panels on which downstream CNN-BiLSTM forecasters may be evaluated over longer horizons. Forecasting retrains are subsequently executed on train-only CSVs, compared across seeds and experiment variants, and only the selected frozen artifacts are connected to the API.</div>
+<h2>Rationale For GAN-Based Extension</h2>
+<ul><li>The forecasting models consume interacting market and macroeconomic variables rather than a single univariate target.</li><li>The forecasting workflow operates in return space, implying that useful synthetic data must preserve return distributions and dependence structure instead of merely producing visually smooth price levels.</li><li>Simple interpolation is generally too smooth for financial time series and does not preserve multivariate joint behaviour.</li><li>Accordingly, GANs are used here as multivariate future-panel generators for augmentation, synthetic holdout construction, and dashboard simulation.</li></ul>
+<div class="warning-box"><strong>Methodological boundary.</strong> Strong synthetic-data fidelity does not, by itself, establish real-market forecasting skill. In the sections that follow, any evaluation rows marked as GAN-generated should be interpreted as synthetic actuals and therefore support internal validation and simulation analysis rather than real-market performance claims.</div>
+<h2>System Flow</h2>
+<ol>
+  <li>Observed source data is cleaned and aligned into a prepared business-day panel for each asset.</li>
+  <li>GAN validation is then used to identify a future extension candidate that best preserves return-space behaviour.</li>
+  <li>The selected extension is appended to construct the extended train and test CSVs.</li>
+  <li>Forecast retraining experiments operate on the train CSVs only, using Optuna together with multi-seed CNN-BiLSTM refits.</li>
+  <li>Only selected frozen model artifacts are deployed into <span class="mono">api.py</span>; the dashboard therefore reads precomputed predictions rather than retraining online.</li>
+  <li>The test CSVs remain outside the train-only retraining loops and serve as the dashboard's walk-forward simulation window.</li>
+</ol>
 <h2>Cross-Asset Summary</h2>
 {table_html(summary_df)}
 {''.join(asset_sections)}

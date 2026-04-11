@@ -88,11 +88,11 @@ ASSET_CONFIG = {
     "gold": {
         "train_csv": "df_gold_dataset_gepu_extended_train.csv",
         "test_csv": "df_gold_dataset_gepu_extended_test.csv",
-        "best_params": "reports/df_gold_dataset_gepu_datecut_full/gold_best_params_optimized.json",
-        "model_dir": "models/df_gold_dataset_gepu_datecut_full/seed_99",
+        "best_params": "reports/gold_train_only_retrained/gold_best_params_optimized.json",
+        "model_dir": "models/gold_train_only_retrained/seed_99",
         "model_pth": "cnn_bilstm_seed99.pth",
         "target_col": "Gold_Futures",
-        "dataset_label": "GEPU Extended Date-Cut Model",
+        "dataset_label": "GEPU Extended Train-Only Retrained Model",
     },
     "silver": {
         "train_csv": "silver_RRL_interpolate_extended_train.csv",

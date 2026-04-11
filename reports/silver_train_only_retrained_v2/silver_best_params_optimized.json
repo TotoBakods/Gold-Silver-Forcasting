@@ -1,0 +1,11 @@
+{
+    "lookback": 17,
+    "filters": 39,
+    "kernel_size": 4,
+    "lstm_units": 127,
+    "dense_units": 39,
+    "dropout_rate": 0.3676964855965576,
+    "learning_rate": 0.0019629631957342247,
+    "l2_reg": 0.00017983778608549319,
+    "batch_size": 32
+}

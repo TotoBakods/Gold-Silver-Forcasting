@@ -45,6 +45,19 @@ def parse_int_list_env(env_name: str, default_values):
         return list(default_values)
     return [int(part.strip()) for part in raw.split(",") if part.strip()]
 
+
+def parse_range_env(env_name: str, default_values, cast):
+    raw = os.getenv(env_name, "").strip()
+    if not raw:
+        return tuple(default_values)
+    parts = [part.strip() for part in raw.split(",") if part.strip()]
+    if len(parts) != 2:
+        raise ValueError(f"{env_name} must contain exactly two comma-separated values.")
+    lower, upper = cast(parts[0]), cast(parts[1])
+    if lower >= upper:
+        raise ValueError(f"{env_name} must have an increasing range, got {raw!r}.")
+    return (lower, upper)
+
 # =========================
 # 2) User Inputs
 # =========================
@@ -75,15 +88,15 @@ TRAIN_SPLIT_EXPORT_PATH = os.getenv("GOLD_TRAIN_SPLIT_EXPORT_PATH", f"{DATASET_B
 TEST_SPLIT_EXPORT_PATH = os.getenv("GOLD_TEST_SPLIT_EXPORT_PATH", f"{DATASET_BASENAME}_test.csv")
 
 PBOUNDS = {
-    "lookback": (10, 60),
-    "filters": (16, 128),
-    "kernel_size": (2, 5),
-    "lstm_units": (32, 256),
-    "dense_units": (16, 64),
-    "dropout_rate": (0.1, 0.5),
-    "learning_rate": (1.0e-5, 1.0e-2),
-    "l2_reg": (1.0e-6, 1.0e-3),
-    "batch_size_exp": (4, 9),
+    "lookback": parse_range_env("GOLD_LOOKBACK_RANGE", (10, 60), int),
+    "filters": parse_range_env("GOLD_FILTERS_RANGE", (16, 128), int),
+    "kernel_size": parse_range_env("GOLD_KERNEL_SIZE_RANGE", (2, 5), int),
+    "lstm_units": parse_range_env("GOLD_LSTM_UNITS_RANGE", (32, 256), int),
+    "dense_units": parse_range_env("GOLD_DENSE_UNITS_RANGE", (16, 64), int),
+    "dropout_rate": parse_range_env("GOLD_DROPOUT_RANGE", (0.1, 0.5), float),
+    "learning_rate": parse_range_env("GOLD_LEARNING_RATE_RANGE", (1.0e-5, 1.0e-2), float),
+    "l2_reg": parse_range_env("GOLD_L2_REG_RANGE", (1.0e-6, 1.0e-3), float),
+    "batch_size_exp": parse_range_env("GOLD_BATCH_SIZE_EXP_RANGE", (4, 9), int),
 }
 
 # =========================

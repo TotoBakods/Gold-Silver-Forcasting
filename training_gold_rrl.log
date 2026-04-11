@@ -149,3 +149,23 @@ If you will use compatible GPU(s) not attached to this host, e.g. by running a m
 2026-04-11 22:36:09,921 [INFO] GPU found: NVIDIA GeForce RTX 3060
 2026-04-11 22:36:09,969 [INFO] Exported date split files using cutoff 2026-04-09: df_gold_dataset_gepu_extended_train.csv (2878 rows), df_gold_dataset_gepu_extended_test.csv (190 rows)
 2026-04-11 22:36:09,971 [INFO] Using date cutoff split at 2026-04-09: model_train_rows=2876, model_test_rows=190, train_last_input_date=2026-04-08, test_first_input_date=2026-04-09
+2026-04-11 10:12:34,770 [INFO] GPU found: NVIDIA GeForce RTX 3060
+2026-04-11 10:38:31,466 [INFO] Saved split summary to reports/gold_train_only_retrained\data_split_summary.json
+2026-04-11 10:38:31,466 [INFO] SEED 0 EVALUATION
+2026-04-11 10:38:42,221 [INFO] SEED 1 EVALUATION
+2026-04-11 10:38:53,360 [INFO] SEED 2 EVALUATION
+2026-04-11 10:38:59,158 [INFO] SEED 42 EVALUATION
+2026-04-11 10:39:05,018 [INFO] SEED 99 EVALUATION
+2026-04-11 10:39:13,231 [INFO] SEED 123 EVALUATION
+2026-04-11 11:15:30,324 [INFO] GPU found: NVIDIA GeForce RTX 3060
+2026-04-11 12:26:23,070 [INFO] Saved split summary to reports/gold_train_only_retrained_v2\data_split_summary.json
+2026-04-11 12:26:23,071 [INFO] SEED 0 EVALUATION
+2026-04-11 12:26:47,938 [INFO] SEED 1 EVALUATION
+2026-04-11 12:27:07,509 [INFO] SEED 2 EVALUATION
+2026-04-11 12:27:28,644 [INFO] SEED 7 EVALUATION
+2026-04-11 12:28:05,245 [INFO] SEED 11 EVALUATION
+2026-04-11 12:28:23,119 [INFO] SEED 17 EVALUATION
+2026-04-11 12:28:56,096 [INFO] SEED 21 EVALUATION
+2026-04-11 12:29:22,280 [INFO] SEED 42 EVALUATION
+2026-04-11 12:29:44,247 [INFO] SEED 99 EVALUATION
+2026-04-11 12:30:07,984 [INFO] SEED 123 EVALUATION
