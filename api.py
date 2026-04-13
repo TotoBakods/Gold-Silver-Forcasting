@@ -327,12 +327,12 @@ def retrain_on_revealed_day(asset, day_idx):
     # 2. Diversity Batch Collection
     X_batch, y_batch, l_batch = get_training_batch(asset, day_idx, batch_size=10)
     
-    # 3. Retraining with Entropy Injection
+    # 3. Retraining with Entropy Injection (STABILIZED)
     num_epochs = 2 if ensemble_hit else 4
-    if shadow_trigger: num_epochs = 20 # Full brain reset
+    if shadow_trigger: num_epochs = 10 # Break habit without blowing out weights
     
     is_lively = (st.get("dataset_mode") == "lively")
-    lr_mult = 5.0 if shadow_trigger else 1.0
+    lr_mult = 2.0 if shadow_trigger else 1.0 # Damped from 5.0 for stability
     criterion = ProactiveDirectionalLoss()
     final_loss = 0.0
     
@@ -346,6 +346,7 @@ def retrain_on_revealed_day(asset, day_idx):
             output = model(X_batch + noise)
             loss = criterion(output, y_batch, is_lively=is_lively, last_target=l_batch)
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0) # GRADIENT SHIELD
             optimizer.step()
             final_loss = loss.item()
         model.eval()
@@ -354,17 +355,18 @@ def retrain_on_revealed_day(asset, day_idx):
     # STABILIZATION: Move from fixed 0.6x to ADAPTIVE DAMPER
     pred_inv_ret = np.mean(seed_preds)
     
-    # Calculate rolling dir accuracy from last 10 samples for the log
+    # ADAPTIVE DAMPER: 0.5x BASE + ACCURACY BONUS
     acc_bonus = 1.0
     logs = st["diagnostic_logs"]
     if len(logs) >= 5:
-        # Use existing logs to decide confidence for this new entry
         hits = sum(1 for l in logs[-10:] if l.get("hit", False))
         rolling_acc = hits / len(logs[-10:])
         if rolling_acc > 0.6: acc_bonus = 1.5
         elif rolling_acc < 0.4: acc_bonus = 0.8
             
-    final_damper = 0.5 * acc_bonus
+    # REGIME SCALER: Match the volatility of the Lively GAN (Calibrated Post-Thaw)
+    vol_scaler = 1.5 if st.get("dataset_mode") == "lively" else 1.0
+    final_damper = 0.5 * acc_bonus * vol_scaler
     
     # Capture Diagnostic Stats
     mag_err = abs(actual_return - pred_inv_ret) / (abs(actual_return) + 1e-8)
@@ -395,8 +397,7 @@ def retrain_on_revealed_day(asset, day_idx):
             sst = np.sum((aa - np.mean(aa))**2)
             running_r2 = round(float(1 - ssr/(sst + 1e-9)), 3)
 
-    # Volatility Check for the log
-    vol_scaler = 4.0 if st.get("dataset_mode") == "lively" else 1.0
+    # vol_scaler is now defined above for math consistency
     
     # Shadow Factor for the log
     preds_arr = np.array([l["pred_ret"] for l in logs[-10:]] + [pred_inv_ret])
@@ -599,12 +600,17 @@ def get_status(asset: str):
         pred_rets = (pred_prices[1:] - actual_prices[:-1]) / (actual_prices[:-1] + 1e-8)
         
         if len(actual_rets) > 0:
-            # --- ROLLING WINDOW (Last 20 Days for RMSE/Accuracy) ---
+            # --- ROLLING WINDOW (Last 20 Days for RMSE/Accuracy/R2) ---
             window = 20
             actual_rets_w = actual_rets[-window:]
             pred_rets_w = pred_rets[-window:]
             rolling_rmse = round(float(np.sqrt(np.mean((actual_rets_w - pred_rets_w) ** 2))), 5)
             rolling_dir_acc = round(float(np.mean(np.sign(actual_rets_w) == np.sign(pred_rets_w))), 3)
+            
+            # Rolling R2
+            ss_res_w = np.sum((actual_rets_w - pred_rets_w) ** 2)
+            ss_tot_w = np.sum((actual_rets_w - np.mean(actual_rets_w)) ** 2)
+            rolling_r2 = round(float(1 - ss_res_w / (ss_tot_w + 1e-9)), 3) if ss_tot_w > 1e-9 else 0.0
 
             # --- DAILY METRIC (Latest Day Alone) ---
             latest_actual_ret = actual_rets[-1]
@@ -619,7 +625,7 @@ def get_status(asset: str):
             overall_rmse = round(float(np.sqrt(np.mean((actual_rets_all - pred_rets_all) ** 2))), 5)
             ss_res_all = np.sum((actual_rets_all - pred_rets_all) ** 2)
             ss_tot_all = np.sum((actual_rets_all - np.mean(actual_rets_all)) ** 2)
-            overall_r2 = round(max(-1.0, float(1 - ss_res_all / (ss_tot_all + 1e-9))), 3) if ss_tot_all > 1e-9 else 0.0
+            overall_r2 = round(float(1 - ss_res_all / (ss_tot_all + 1e-9)), 3) if ss_tot_all > 1e-9 else 0.0
             overall_dir_acc = round(float(np.mean(np.sign(actual_rets_all) == np.sign(pred_rets_all))), 3)
             overall_dir_acc = round(float(np.mean(np.sign(actual_rets_all) == np.sign(pred_rets_all))), 3)
 
@@ -656,6 +662,7 @@ def get_status(asset: str):
         "rolling_dir_acc": rolling_dir_acc,
         "overall_rmse": overall_rmse if 'overall_rmse' in locals() else None,
         "overall_r2": overall_r2 if 'overall_r2' in locals() else None,
+        "rolling_r2": rolling_r2 if 'rolling_r2' in locals() else None,
         "overall_dir_acc": overall_dir_acc if 'overall_dir_acc' in locals() else None,
         "yesterday_actual": yesterday_actual,
         "yesterday_pred": yesterday_pred,

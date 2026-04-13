@@ -574,20 +574,22 @@
                     </div>
                 </div>
                 
-                <div class="metric-block">
+                <div class="metric-block" style="display: flex; gap: 1rem; flex-wrap: wrap;">
                     <div class="metric-item">
-                        <div class="price-label">Rolling RMSE</div>
-                        <div class="metric-val" id="metric-rmse">--</div>
+                        <div class="price-label">All-Time R²</div>
+                        <div class="metric-val" id="top-overall-r2">--</div>
                     </div>
                     <div class="metric-item">
-                        <div class="price-label">Daily Reliability</div>
-                        <div class="metric-val" id="metric-r2">--</div>
+                        <div class="price-label">Recent R² (20d)</div>
+                        <div class="metric-val" id="top-rolling-r2" style="color: var(--primary);">--</div>
                     </div>
-                </div>
-                <div class="metric-block" style="margin-top: 0.75rem;">
                     <div class="metric-item">
-                        <div class="price-label">Directional Accuracy</div>
-                        <div class="metric-val" id="metric-dir-acc">--</div>
+                        <div class="price-label">Total RMSE</div>
+                        <div class="metric-val" id="top-overall-rmse">--</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="price-label">Dir. Accuracy</div>
+                        <div class="metric-val" id="top-metric-dir-acc">--</div>
                     </div>
                 </div>
             </div>
@@ -627,15 +629,15 @@
             <div class="overall-stats-bar">
                 <div>
                     <span class="label">Total RMSE</span>
-                    <span class="value" id="overall-rmse">--</span>
+                    <span class="value" id="bar-overall-rmse">--</span>
                 </div>
                 <div>
                     <span class="label">Total R²</span>
-                    <span class="value" id="overall-r2">--</span>
+                    <span class="value" id="bar-overall-r2">--</span>
                 </div>
                 <div>
                     <span class="label">Total Dir. Acc.</span>
-                    <span class="value" id="overall-dir-acc">--</span>
+                    <span class="value" id="bar-overall-dir-acc">--</span>
                 </div>
                 <div style="margin-left: auto; text-align: right;">
                     <span class="label">Total Samples</span>
@@ -843,10 +845,9 @@
                     document.getElementById('yest-pred').innerText = '--';
                 }
                 
-                document.getElementById('metric-rmse').innerText = data.rolling_rmse !== null ? `$${data.rolling_rmse}` : '--';
-                document.getElementById('metric-r2').innerText = data.rolling_r2 !== null ? data.rolling_r2 : '--';
+                // Rolling stats (using calibrated model properties)
                 const dirAcc = data.rolling_dir_acc;
-                const dirAccEl = document.getElementById('metric-dir-acc');
+                const dirAccEl = document.getElementById('top-metric-dir-acc');
                 if (dirAcc !== null && dirAcc !== undefined) {
                     const pct = (dirAcc * 100).toFixed(1);
                     dirAccEl.innerText = `${pct}%`;
@@ -875,11 +876,23 @@
                 document.getElementById('regime-lively').classList.toggle('active', mode === 'lively');
                 document.getElementById('regime-standard').classList.toggle('active', mode === 'standard');
 
-                document.getElementById('overall-rmse').innerText = data.overall_rmse !== null ? `$${data.overall_rmse}` : '--';
-                document.getElementById('overall-r2').innerText = data.overall_r2 !== null ? data.overall_r2 : '--';
-                if (data.overall_dir_acc !== null) {
-                    document.getElementById('overall-dir-acc').innerText = `${(data.overall_dir_acc * 100).toFixed(1)}%`;
-                }
+                // Unified Stats Rendering (Updating both Top Grid and Bar)
+                const rmseTxt = data.overall_rmse !== null && data.overall_rmse !== undefined ? `$${data.overall_rmse}` : '--';
+                const r2Txt = data.overall_r2 !== null && data.overall_r2 !== undefined ? data.overall_r2.toFixed(3) : '--';
+                const rollR2Txt = data.rolling_r2 !== null && data.rolling_r2 !== undefined ? data.rolling_r2.toFixed(3) : '--';
+                const accTxt = data.overall_dir_acc !== null ? `${(data.overall_dir_acc * 100).toFixed(1)}%` : '--';
+
+                // Apply to Top Grid
+                document.getElementById('top-overall-rmse').innerText = rmseTxt;
+                document.getElementById('top-overall-r2').innerText = r2Txt;
+                document.getElementById('top-rolling-r2').innerText = rollR2Txt;
+                document.getElementById('top-metric-dir-acc').innerText = accTxt;
+
+                // Apply to Visual Log Bar
+                document.getElementById('bar-overall-rmse').innerText = rmseTxt;
+                document.getElementById('bar-overall-r2').innerText = r2Txt;
+                document.getElementById('bar-overall-dir-acc').innerText = accTxt;
+
                 document.getElementById('total-samples').innerText = data.history_log ? data.history_log.length : 0;
 
                 document.getElementById('last-train-date').innerText = data.last_train_price ? `${data.last_train_date || '-'} @ $${data.last_train_price.toFixed(2)}` : '--';
