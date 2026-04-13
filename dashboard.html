@@ -676,6 +676,20 @@
             await fetchStatus();
         }
 
+        async function setRegime(mode) {
+            const terminal = document.getElementById('console-logs');
+            terminal.innerHTML = `<div class="log-entry" style="color: var(--primary); font-weight: bold;">[SYSTEM] RELOADING DATASET: [${mode.toUpperCase()}]...</div>
+                                  <div class="log-entry">[SYSTEM] RESETTING SIMULATION STATE & MODELS...</div>`;
+            
+            try {
+                const response = await fetch(`${API_BASE}/regime/${currentAsset}?mode=${mode}`, { method: 'POST' });
+                if (!response.ok) throw new Error("Regime Switch Failed");
+                await fetchStatus();
+            } catch (err) {
+                terminal.innerHTML += `<div class="log-entry" style="color: #ff4d4d;">[ERROR] REGIME SWITCH FAILED: ${err.message}</div>`;
+            }
+        }
+
         async function setSimulationDate() {
             const date = document.getElementById('date-picker').value;
             const terminal = document.getElementById('console-logs');

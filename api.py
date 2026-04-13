@@ -341,6 +341,28 @@ def set_current_date(asset: str, date: str):
     except: raise HTTPException(status_code=400, detail="Invalid date")
     return set_simulation_date_state(asset, selected_date)
 
+@app.post("/api/regime/{asset}")
+def set_regime(asset: str, mode: str):
+    if mode not in ["standard", "lively"]: raise HTTPException(status_code=400, detail="Invalid mode")
+    config, st = ASSET_CONFIG[asset], state[asset]
+    
+    # Update Mode & Reload Dataset
+    st["dataset_mode"] = mode
+    test_file = config["lively_test_csv"] if mode == "lively" else config["test_csv"]
+    st["test_df"] = pd.read_csv(test_file)
+    st["test_df"]["Date"] = pd.to_datetime(st["test_df"]["Date"])
+    st["test_df"]["Date_obj"] = st["test_df"]["Date"].dt.date
+    
+    # Reset State
+    st["test_idx"] = 0
+    st["diagnostic_logs"] = []
+    st["history"] = {}
+    st["current_date"] = st["test_df"].iloc[0]["Date_obj"]
+    reset_models_to_base(asset)
+    
+    save_runtime_state()
+    return {"status": "success", "mode": mode, "current_date": str(st["current_date"])}
+
 @app.get("/api/init")
 def initialize():
     for asset in ASSET_CONFIG:
