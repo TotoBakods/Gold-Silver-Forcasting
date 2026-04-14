@@ -51,15 +51,15 @@ if device.type == "cuda":
 WINDOW_SIZE = 15
 NOISE_DIM = 32
 BATCH_SIZE = int(os.getenv("GAN_BATCH_SIZE", "256" if device.type == "cuda" else "64"))
-EPOCHS = int(os.getenv("GAN_EPOCHS", "250"))
+EPOCHS = int(os.getenv("GAN_EPOCHS", "500"))
 LR_G = float(os.getenv("GAN_LR_G", "0.0002"))
 LR_D = float(os.getenv("GAN_LR_D", "0.0002"))
-N_CRITIC = int(os.getenv("GAN_N_CRITIC", "3"))
+N_CRITIC = int(os.getenv("GAN_N_CRITIC", "5"))
 GEN_HIDDEN_SIZE = int(os.getenv("GAN_GEN_HIDDEN_SIZE", "128"))
 DISC_HIDDEN_SIZE = int(os.getenv("GAN_DISC_HIDDEN_SIZE", "128"))
 GEN_DROPOUT = float(os.getenv("GAN_GEN_DROPOUT", "0.10"))
 MSE_LOSS_WEIGHT = float(os.getenv("GAN_MSE_LOSS_WEIGHT", "1.0"))
-MOMENT_LOSS_WEIGHT = float(os.getenv("GAN_MOMENT_LOSS_WEIGHT", "0.75"))
+MOMENT_LOSS_WEIGHT = float(os.getenv("GAN_MOMENT_LOSS_WEIGHT", "1.5"))
 DRIFT_LOSS_WEIGHT = float(os.getenv("GAN_DRIFT_LOSS_WEIGHT", "0.25"))
 NUM_WORKERS = int(os.getenv("GAN_NUM_WORKERS", "0"))
 PIN_MEMORY = device.type == "cuda"
