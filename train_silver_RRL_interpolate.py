@@ -117,9 +117,13 @@ def train_model(X_train, y_train, X_test, y_test, input_dim, seed):
 def main():
     logger.info("Starting Silver Price Training (Single Model - No Ensemble)")
     
+    train_csv = os.getenv("SILVER_TRAIN_CSV", "silver_RRL_interpolate_extended_train.csv")
+    test_csv = os.getenv("SILVER_TEST_CSV", "silver_RRL_interpolate_extended_test.csv")
+    save_dir = os.getenv("SILVER_MODEL_DIR", "models/silver_RRL_interpolate")
+
     # Load data
-    train_df = pd.read_csv("silver_RRL_interpolate_extended_train.csv")
-    test_df = pd.read_csv("silver_RRL_interpolate_extended_test.csv")
+    train_df = pd.read_csv(train_csv)
+    test_df = pd.read_csv(test_csv)
     
     features = ['Silver_Futures', 'Gold_Futures', 'US30', 'SnP500', 'NASDAQ_100', 'USD_index']
     target_col = 'Silver_Futures'
@@ -174,18 +178,17 @@ def main():
     X_test, y_test = create_sequences(test_X_scaled, test_y_scaled, LOOKBACK)
     
     # Council Training
-    SAVE_DIR = "models/silver_RRL_interpolate"
-    os.makedirs(SAVE_DIR, exist_ok=True)
+    os.makedirs(save_dir, exist_ok=True)
     
     for seed in COUNCIL_SEEDS:
         logger.info(f"--- Training Council Member: Seed {seed} ---")
         model = train_model(X_train, y_train, X_test, y_test, len(all_features), seed)
-        torch.save(model.state_dict(), os.path.join(SAVE_DIR, f"silver_model_seed_{seed}.pth"))
+        torch.save(model.state_dict(), os.path.join(save_dir, f"silver_model_seed_{seed}.pth"))
 
     # Save shared assets
-    with open(os.path.join(SAVE_DIR, "scaler_X.pkl"), "wb") as f: pickle.dump(scaler_X, f)
-    with open(os.path.join(SAVE_DIR, "scaler_y.pkl"), "wb") as f: pickle.dump(scaler_y, f)
-    with open(os.path.join(SAVE_DIR, "best_params.json"), "w") as f:
+    with open(os.path.join(save_dir, "scaler_X.pkl"), "wb") as f: pickle.dump(scaler_X, f)
+    with open(os.path.join(save_dir, "scaler_y.pkl"), "wb") as f: pickle.dump(scaler_y, f)
+    with open(os.path.join(save_dir, "best_params.json"), "w") as f:
         json.dump({
             "lookback": LOOKBACK,
             "filters": FILTERS,
@@ -193,6 +196,15 @@ def main():
             "hidden_dim": HIDDEN_DIM,
             "dropout": DROPOUT,
             "lr": LEARNING_RATE
+        }, f)
+    with open(os.path.join(save_dir, "model_metadata.json"), "w") as f:
+        json.dump({
+            "train_csv": train_csv,
+            "test_csv": test_csv,
+            "target_col": target_col,
+            "feature_cols": all_features,
+            "tech_cols": tech_cols,
+            "lookback": LOOKBACK,
         }, f)
     
     logger.info("Silver Council Training Complete.")

@@ -167,6 +167,69 @@
             position: relative;
         }
 
+        .diagnostics-section {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--card-radius);
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .diag-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+        }
+
+        .diag-title {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+        }
+
+        .diag-subtitle {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .diag-badge {
+            border: 1px solid var(--border);
+            padding: 0.4rem 0.8rem;
+            border-radius: 999px;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            color: var(--text-muted);
+        }
+
+        .diag-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1rem;
+        }
+
+        .diag-card {
+            background: var(--surface-accent);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .diag-card img {
+            width: 100%;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+        }
+
         .forecast-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -428,6 +491,50 @@
                 <canvas id="predictionChart"></canvas>
             </div>
 
+            <div class="diagnostics-section">
+                <div class="diag-header">
+                    <div>
+                        <h3 style="margin:0">GAN Diagnostics</h3>
+                        <div class="diag-subtitle">Real test window vs synthetic (stationary features)</div>
+                    </div>
+                    <div class="diag-badge">Validation: Apr 1-13, 2026</div>
+                </div>
+                <div class="diag-grid">
+                    <div class="diag-card">
+                        <div class="diag-title">Wasserstein distance</div>
+                        <img id="diag-wasserstein" alt="Wasserstein distance" />
+                    </div>
+                    <div class="diag-card">
+                        <div class="diag-title">Distribution overlays</div>
+                        <img id="diag-hist" alt="Histogram overlays" />
+                    </div>
+                    <div class="diag-card">
+                        <div class="diag-title">ACF comparison</div>
+                        <img id="diag-acf" alt="ACF comparison" />
+                    </div>
+                    <div class="diag-card">
+                        <div class="diag-title">PACF comparison</div>
+                        <img id="diag-pacf" alt="PACF comparison" />
+                    </div>
+                    <div class="diag-card">
+                        <div class="diag-title">Correlation heatmaps</div>
+                        <img id="diag-corr" alt="Correlation heatmaps" />
+                    </div>
+                    <div class="diag-card">
+                        <div class="diag-title">PCA projection</div>
+                        <img id="diag-pca" alt="PCA projection" />
+                    </div>
+                    <div class="diag-card">
+                        <div class="diag-title">t-SNE projection</div>
+                        <img id="diag-tsne" alt="t-SNE projection" />
+                    </div>
+                    <div class="diag-card">
+                        <div class="diag-title">Classifier scores</div>
+                        <img id="diag-classifier" alt="Classifier scores" />
+                    </div>
+                </div>
+            </div>
+
             <div class="control-panel">
                 <button id="next-btn" class="btn-action" onclick="nextDay()">REVEAL NEXT MARKET DAY</button>
                 <div style="flex: 1"></div>
@@ -451,8 +558,35 @@
 
     <script>
         const API_BASE = "/api";
+        const DASHBOARD_DATA_URL = "reports/forecast_dashboard_data.json";
+        const GAN_DIAG_BASE = "reports/gan_diagnostics";
+        const validationRange = { start: "2026-04-01", end: "2026-04-13" };
         let currentAsset = "gold";
         let chart = null;
+        let dashboardData = null;
+
+        const validationShade = {
+            id: "validationShade",
+            beforeDatasetsDraw(chartInstance) {
+                const labels = chartInstance.data.labels || [];
+                const startIndex = labels.indexOf(validationRange.start);
+                const endIndex = labels.indexOf(validationRange.end);
+                if (startIndex === -1 || endIndex === -1) return;
+
+                const xScale = chartInstance.scales.x;
+                const yScale = chartInstance.scales.y;
+                const left = xScale.getPixelForValue(startIndex);
+                const right = xScale.getPixelForValue(endIndex);
+                const top = yScale.top;
+                const bottom = yScale.bottom;
+
+                const ctx = chartInstance.ctx;
+                ctx.save();
+                ctx.fillStyle = "rgba(0, 245, 255, 0.08)";
+                ctx.fillRect(left, top, right - left, bottom - top);
+                ctx.restore();
+            }
+        };
 
         function initChart() {
             const ctx = document.getElementById('predictionChart').getContext('2d');
@@ -483,6 +617,15 @@
                             pointBackgroundColor: '#00F5FF',
                             data: [],
                             tension: 0.4
+                        },
+                        {
+                            label: 'GAN Synthetic',
+                            borderColor: '#F5C542',
+                            borderWidth: 2,
+                            borderDash: [6, 4],
+                            pointRadius: 0,
+                            data: [],
+                            tension: 0.3
                         }
                     ]
                 },
@@ -510,7 +653,7 @@
                         }
                     },
                     plugins: {
-                        legend: { display: false },
+                        legend: { display: true, labels: { color: '#cbd5f5' } },
                         tooltip: {
                             backgroundColor: 'rgba(20, 22, 31, 1)',
                             titleFont: { family: 'Outfit', size: 14, weight: 'bold' },
@@ -524,11 +667,146 @@
                             }
                         }
                     }
-                }
+                },
+                plugins: [validationShade]
             });
         }
 
+        async function loadDashboardData() {
+            try {
+                const res = await fetch(DASHBOARD_DATA_URL);
+                if (!res.ok) return false;
+                dashboardData = await res.json();
+                return true;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function updateDiagnosticsImages(asset) {
+            const map = {
+                "diag-wasserstein": "wasserstein_distance.png",
+                "diag-hist": "hist_overlays.png",
+                "diag-acf": "acf_comparison.png",
+                "diag-pacf": "pacf_comparison.png",
+                "diag-corr": "correlation_heatmaps.png",
+                "diag-pca": "pca_scatter.png",
+                "diag-tsne": "tsne_scatter.png",
+                "diag-classifier": "classifier_scores.png"
+            };
+            Object.entries(map).forEach(([id, file]) => {
+                const img = document.getElementById(id);
+                if (img) img.src = `${GAN_DIAG_BASE}/${asset}/${file}`;
+            });
+        }
+
+        function updateKpisFromMetrics(metrics) {
+            const rmse = metrics && metrics.rmse != null ? `$${metrics.rmse.toFixed(2)}` : '--';
+            const mae = metrics && metrics.mae != null ? `$${metrics.mae.toFixed(2)}` : '--';
+            const r2 = metrics && metrics.r2 != null ? metrics.r2.toFixed(3) : '--';
+
+            document.getElementById('kpi-rmse').innerText = rmse;
+            document.getElementById('kpi-mae').innerText = mae;
+            document.getElementById('kpi-r2').innerText = r2;
+            document.getElementById('chart-r2').innerText = r2;
+
+            const r2Badge = document.getElementById('kpi-r2-status');
+            const rVal = metrics && metrics.r2 != null ? metrics.r2 : 0;
+            r2Badge.innerText = rVal > 0.8 ? 'EXCELLENT' : (rVal > 0.5 ? 'STABLE' : 'DRIFTING');
+            r2Badge.style.color = rVal > 0.5 ? 'var(--primary)' : '#FF4B5C';
+        }
+
+        function updateChartStatic(assetData) {
+            chart.data.labels = assetData.dates;
+            chart.data.datasets[0].data = assetData.actual;
+            chart.data.datasets[1].data = assetData.predicted;
+            chart.data.datasets[2].data = assetData.synthetic;
+            chart.options.scales.x.ticks.maxTicksLimit = 15;
+            chart.update('none');
+        }
+
+        function renderStaticLogs(assetData) {
+            const logs = [];
+            const dates = assetData.dates;
+            const actual = assetData.actual;
+            const predicted = assetData.predicted;
+
+            let errors = [];
+            let prevActual = null;
+            for (let i = 0; i < dates.length; i++) {
+                if (actual[i] == null) continue;
+                const err = actual[i] - predicted[i];
+                errors.push(err);
+                const rmse = Math.sqrt(errors.reduce((sum, v) => sum + v * v, 0) / errors.length);
+                const mae = errors.reduce((sum, v) => sum + Math.abs(v), 0) / errors.length;
+
+                let hit = false;
+                if (prevActual != null) {
+                    const actualDelta = actual[i] - prevActual;
+                    const predDelta = predicted[i] - prevActual;
+                    hit = Math.sign(actualDelta) === Math.sign(predDelta);
+                }
+
+                logs.push({
+                    date: dates[i],
+                    actual_price: actual[i],
+                    pred_price: predicted[i],
+                    hit: hit,
+                    rolling_rmse: rmse,
+                    rolling_mae: mae,
+                    rolling_r2: null
+                });
+                prevActual = actual[i];
+            }
+
+            renderLogs(logs);
+        }
+
+        function renderDashboardAsset() {
+            if (!dashboardData || !dashboardData.assets || !dashboardData.assets[currentAsset]) return;
+            const assetData = dashboardData.assets[currentAsset];
+
+            updateKpisFromMetrics(assetData.metrics || {});
+            updateChartStatic(assetData);
+            updateDiagnosticsImages(currentAsset);
+
+            const lastIndex = assetData.dates.length - 1;
+            const lastPred = assetData.predicted[lastIndex];
+            const lastDate = assetData.dates[lastIndex];
+            document.getElementById('price-target').innerText = `$${Number(lastPred).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            document.getElementById('forecast-date').innerText = lastDate;
+            document.getElementById('council-agreement').innerText = 'N/A';
+
+            const lastActualIndex = assetData.actual.reduce((acc, val, idx) => val != null ? idx : acc, -1);
+            if (lastActualIndex >= 0) {
+                const actualVal = assetData.actual[lastActualIndex];
+                const predVal = assetData.predicted[lastActualIndex];
+                document.getElementById('prev-actual').innerText = `$${actualVal.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+                document.getElementById('prev-pred').innerText = `$${predVal.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+                const delta = Math.abs(actualVal - predVal);
+                document.getElementById('prev-delta').innerText = `Δ $${delta.toFixed(2)}`;
+            }
+
+            const perfScore = assetData.metrics && assetData.metrics.r2 != null ? Math.max(0, assetData.metrics.r2 * 100).toFixed(1) : '--';
+            document.getElementById('perf-score').innerText = `${perfScore}%`;
+            document.getElementById('kpi-da').innerText = '--';
+            document.getElementById('kpi-mda').innerText = '--';
+
+            renderStaticLogs(assetData);
+        }
+
+        function disableControls() {
+            document.getElementById('next-btn').disabled = true;
+            const picker = document.getElementById('date-picker');
+            picker.disabled = true;
+            picker.value = '';
+        }
+
         async function fetchStatus() {
+            if (dashboardData) {
+                renderDashboardAsset();
+                return;
+            }
             try {
                 const res = await fetch(`${API_BASE}/status/${currentAsset}`);
                 const data = await res.json();
@@ -608,7 +886,7 @@
              }
         }
 
-        function renderLogs(logs) {
+        function renderLogs(logs = []) {
             const container = document.getElementById('console-logs');
             container.innerHTML = '';
             document.getElementById('log-count').innerText = `${logs.length} SAMPLES`;
@@ -639,16 +917,19 @@
             const labels = history.map(h => h.date);
             const actuals = history.map(h => h.actual);
             const preds = history.map(h => h.predicted);
+            const synthetic = history.map(() => null);
 
             // Add the "Future" forecast (the point for tomorrow)
             labels.push(forecastDate);
             actuals.push(null);
             preds.push(forecastPrice);
+            synthetic.push(null);
 
             // "Fit" logic: Show the full simulation history instead of a sliding window
             chart.data.labels = labels;
             chart.data.datasets[0].data = actuals;
             chart.data.datasets[1].data = preds;
+            chart.data.datasets[2].data = synthetic;
             
             // Optimize X-axis for growing data
             chart.options.scales.x.ticks.maxTicksLimit = 15;
@@ -657,6 +938,7 @@
         }
 
         async function nextDay() {
+            if (dashboardData) return;
             const btn = document.getElementById('next-btn');
             btn.disabled = true;
             await fetch(`${API_BASE}/next_day/${currentAsset}`, { method: 'POST' });
@@ -664,19 +946,19 @@
             btn.disabled = false;
         }
 
-        async function setRegime(mode) {
-            await fetch(`${API_BASE}/dataset_mode/${currentAsset}?mode=${mode}`, { method: 'POST' });
-            await fetchStatus();
-        }
-
         async function switchAsset(asset) {
             currentAsset = asset;
             document.getElementById('btn-gold').classList.toggle('active', asset === 'gold');
             document.getElementById('btn-silver').classList.toggle('active', asset === 'silver');
-            await fetchStatus();
+            if (dashboardData) {
+                renderDashboardAsset();
+            } else {
+                await fetchStatus();
+            }
         }
 
         async function setRegime(mode) {
+            if (dashboardData) return;
             const terminal = document.getElementById('console-logs');
             terminal.innerHTML = `<div class="log-entry" style="color: var(--primary); font-weight: bold;">[SYSTEM] RELOADING DATASET: [${mode.toUpperCase()}]...</div>
                                   <div class="log-entry">[SYSTEM] RESETTING SIMULATION STATE & MODELS...</div>`;
@@ -691,6 +973,7 @@
         }
 
         async function setSimulationDate() {
+            if (dashboardData) return;
             const date = document.getElementById('date-picker').value;
             const terminal = document.getElementById('console-logs');
             
@@ -707,8 +990,18 @@
             }
         }
 
-        initChart();
-        fetchStatus();
+        async function initDashboard() {
+            initChart();
+            const hasData = await loadDashboardData();
+            if (hasData) {
+                renderDashboardAsset();
+                disableControls();
+            } else {
+                fetchStatus();
+            }
+        }
+
+        initDashboard();
     </script>
 </body>
 </html>
