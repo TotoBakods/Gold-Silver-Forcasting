@@ -40,3 +40,4 @@ tqdm==4.67.3
 typing_extensions==4.15.0
 tzdata==2026.1
 uvicorn==0.38.0
+statsmodels==0.14.6

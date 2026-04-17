@@ -1,0 +1,18 @@
+--- GAN Validation Report: Gold (Val: April 2026) ---
+rmse: 88.948116
+mae: 58.198528
+mape_pct: 1.226862
+ks_stat: 0.375000
+ks_p_value: 0.660140
+vol_ratio: 2.047722
+real_skew: -0.596997
+gen_skew: -0.188971
+real_kurt: 0.446076
+gen_kurt: -0.534126
+directional_accuracy: 0.833333
+acf_mse: 0.045068
+mmd: 0.000058
+jsd: 0.690367
+real_arch_effect: -0.252514
+gen_arch_effect: -0.553756
+mdd_ratio: 2.246764

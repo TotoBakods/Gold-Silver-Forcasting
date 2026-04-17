@@ -1,0 +1,18 @@
+--- GAN Validation Report: Silver (Val: April 2026) ---
+rmse: 3.779163
+mae: 3.032675
+mape_pct: 4.073756
+ks_stat: 0.375000
+ks_p_value: 0.660140
+vol_ratio: 1.942356
+real_skew: 0.302821
+gen_skew: -0.027342
+real_kurt: 0.307692
+gen_kurt: -1.539382
+directional_accuracy: 0.428571
+acf_mse: 0.045482
+mmd: 0.000318
+jsd: 0.832555
+real_arch_effect: -0.196562
+gen_arch_effect: -0.661086
+mdd_ratio: 2.528269

@@ -98,7 +98,6 @@ class Generator(nn.Module):
             nn.GELU(),
             nn.Dropout(GEN_DROPOUT),
             nn.Linear(hidden_size, output_size),
-            nn.Tanh(),
         )
 
     def forward(self, history, noise):
