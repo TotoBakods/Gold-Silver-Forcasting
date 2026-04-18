@@ -17,6 +17,7 @@ ASSET_CONFIGS = {
         "raw_csv": "df_gold_dataset_USA_EPU_APRIL_01_2015_to_APRIL_14_2026.csv",
         "train_end": "2026-01-31",
         "test_start": "2026-02-01",
+        "gan_seed_end": "2026-02-28",  # Matches gan/gold training cutoff — closer regime to test period
         "data_end": "2026-04-13",
         "forecast_end": "2026-05-31",
         "model_dir": "models/gold_RRL_interpolate",
@@ -39,6 +40,7 @@ ASSET_CONFIGS = {
         "raw_csv": "df_silver_dataset_APRIL_01_2015_to_APRIL_14_2026.csv",
         "train_end": "2026-01-31",
         "test_start": "2026-02-01",
+        "gan_seed_end": "2026-02-28",  # Matches gan/silver training cutoff — closer regime to test period
         "data_end": "2026-04-13",
         "forecast_end": "2026-05-31",
         "model_dir": "models/silver_RRL_interpolate",
@@ -160,7 +162,11 @@ def main():
         logger.warning(f"GAN model not found at {config['gan_path']}. Skipping GAN section.")
         netG = None
 
-    future_dates = pd.date_range(start=config["test_start"], end=config["forecast_end"], freq='B')
+    # --- GAN Warm-Up + Free Generation ---
+    # Phase 1 (Warm-up): seed at Jan 31, feed real Feb 1-Feb 28 data step-by-step
+    #   → GAN window lands in the real Feb regime, no wrong starting price level
+    # Phase 2 (Free): generate from Mar 1 → forecast_end
+    # Combined: gan_df covers Feb 1 → forecast_end, matching the actual forecast start
     gan_df = None
     if netG:
         # Stationary prep for GAN
@@ -168,38 +174,77 @@ def main():
             s_df = df_in.copy()
             for col in p_cols: s_df[col] = np.log(df_in[col] / df_in[col].shift(1))
             return s_df.dropna()
-        
+
         p_keywords = ['Futures', 'US30', 'SnP500', 'NASDAQ_100', 'USD_index']
         price_cols = [c for c in features if any(kw in c for kw in p_keywords)]
-        rate_cols = [c for c in features if c not in price_cols]
-        
+        rate_cols  = [c for c in features if c not in price_cols]
+
+        # Fit scaler on train only
         hist_stat_df = make_stationary(train_df[features], price_cols)
         scaler_gan = StandardScaler()
-        scaled_stat = scaler_gan.fit_transform(hist_stat_df.values)
-        win = torch.FloatTensor(scaled_stat[-config["gan_window"]:]).unsqueeze(0).to(device)
-        
+        scaler_gan.fit(hist_stat_df.values)
+
+        # --- Phase 1: warm-up window with real Feb data ---
+        # Seed: last gan_window rows of stationary train (up to Jan 31)
+        scaled_train_stat = scaler_gan.transform(hist_stat_df.values)
+        win = torch.FloatTensor(scaled_train_stat[-config["gan_window"]:]).unsqueeze(0).to(device)
+
+        # Warm-up dataframe: real data from test_start through gan_seed_end
+        warmup_df = df_with_inds[
+            (df_with_inds['Date'] >= config["test_start"]) &
+            (df_with_inds['Date'] <= config["gan_seed_end"])
+        ].reset_index(drop=True)
+
+        # Build stationary returns for the warm-up period (need one row before for diff)
+        warmup_with_prev = df_with_inds[
+            df_with_inds['Date'] <= config["gan_seed_end"]
+        ].tail(len(warmup_df) + 1)[features].copy()
+        warmup_stat_df = make_stationary(warmup_with_prev, price_cols)   # len == len(warmup_df)
+        scaled_warmup = scaler_gan.transform(warmup_stat_df.values)
+
+        # Slide real Feb rows through the window without collecting outputs
+        for step_row in scaled_warmup:
+            real_step = torch.FloatTensor(step_row).reshape(1, 1, -1).to(device)
+            win = torch.cat((win[:, 1:, :], real_step), dim=1)
+
+        # Reconstruct warmup prices directly from real data
+        warmup_prices = warmup_df[features].values.tolist()
+        warmup_dates  = warmup_df['Date'].values
+
+        # --- Phase 2: free generation from Mar 1 → forecast_end ---
+        free_dates = pd.date_range(
+            start=warmup_df['Date'].iloc[-1] + pd.offsets.BDay(1),
+            end=config["forecast_end"], freq='B'
+        )
         gan_stat_gen = []
-        for _ in range(len(future_dates)):
+        for _ in range(len(free_dates)):
             with torch.no_grad():
                 noise = torch.randn(1, config["gan_window"], config["gan_noise"], device=device)
                 next_stat = netG(win, noise)
                 gan_stat_gen.append(next_stat.cpu().numpy()[0, 0, :])
                 win = torch.cat((win[:, 1:, :], next_stat), dim=1)
-        
+
         gan_stat = scaler_gan.inverse_transform(np.array(gan_stat_gen))
-        gan_stat = np.clip(gan_stat, -0.05, 0.05) # Safety clip
-        
-        last_vals = train_df[features].iloc[-1].values.copy()
-        gan_prices = []
+        gan_stat = np.clip(gan_stat, -0.05, 0.05)  # Safety clip
+
+        # Reconstruct free-gen prices starting from last real warmup price
+        last_vals = warmup_df[features].iloc[-1].values.copy()
+        free_prices = []
         for row in gan_stat:
             for i, col in enumerate(features):
                 if col in price_cols: last_vals[i] *= np.exp(row[i])
-                else: last_vals[i] += row[i]
-            gan_prices.append(last_vals.copy())
-        
-        gan_df = pd.DataFrame(gan_prices, columns=features)
-        gan_df['Date'] = future_dates
+                else:                 last_vals[i] += row[i]
+            free_prices.append(last_vals.copy())
+
+        # --- Combine Phase 1 + Phase 2 ---
+        all_prices = warmup_prices + free_prices
+        all_dates  = list(warmup_dates) + list(free_dates)
+        gan_df = pd.DataFrame(all_prices, columns=features)
+        gan_df['Date'] = all_dates
         gan_df = add_indicators(gan_df, target_col)
+
+        # Update future_dates to full span (used later for GAN-based forecast)
+        future_dates = pd.DatetimeIndex(all_dates)
     
     # 4. Forecasting Logic
     lookback = config["lookback"]
@@ -242,7 +287,7 @@ def main():
     plt.plot(actual_pred_df['Date'], actual_pred_df['Forecast'], label='Forecast (Actual-based)', color='green', linewidth=2, linestyle=':')
     
     if gan_df is not None:
-        plt.plot(gan_df['Date'], gan_df[target_col], label='GAN Synthetic Path', color='orange', linestyle='--', alpha=0.6)
+        plt.plot(gan_df['Date'], gan_df[target_col], label='GAN Synthetic Path', color='orange', linewidth=1.8, alpha=0.75)
         # GAN Prediction: Dotted red
         plt.plot(gan_pred_df['Date'], gan_pred_df['Forecast'], label='Forecast (GAN-based)', color='red', linewidth=2, linestyle=':')
     
