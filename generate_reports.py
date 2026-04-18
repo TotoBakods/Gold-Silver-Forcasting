@@ -169,24 +169,30 @@ def main():
     # Combined: gan_df covers Feb 1 → forecast_end, matching the actual forecast start
     gan_df = None
     if netG:
-        # Stationary prep for GAN
-        def make_stationary(df_in, p_cols):
+        # Stationary prep for GAN: prices use log-returns, rates use simple differences
+        def make_stationary(df_in, p_cols, r_cols):
             s_df = df_in.copy()
             for col in p_cols: s_df[col] = np.log(df_in[col] / df_in[col].shift(1))
+            for col in r_cols: s_df[col] = df_in[col].diff()
             return s_df.dropna()
 
         p_keywords = ['Futures', 'US30', 'SnP500', 'NASDAQ_100', 'USD_index']
         price_cols = [c for c in features if any(kw in c for kw in p_keywords)]
         rate_cols  = [c for c in features if c not in price_cols]
 
-        # Fit scaler on train only
-        hist_stat_df = make_stationary(train_df[features], price_cols)
+        # Fit scaler on data up to gan_seed_end (Feb 28) to match GAN training distribution
+        hist_stat_df = make_stationary(
+            df_with_inds[df_with_inds['Date'] <= config["gan_seed_end"]][features], 
+            price_cols, rate_cols
+        )
         scaler_gan = StandardScaler()
         scaler_gan.fit(hist_stat_df.values)
 
         # --- Phase 1: warm-up window with real Feb data ---
         # Seed: last gan_window rows of stationary train (up to Jan 31)
-        scaled_train_stat = scaler_gan.transform(hist_stat_df.values)
+        # Note: we use the correctly fitted scaler here
+        jan_stat_df = make_stationary(train_df[features], price_cols, rate_cols)
+        scaled_train_stat = scaler_gan.transform(jan_stat_df.values)
         win = torch.FloatTensor(scaled_train_stat[-config["gan_window"]:]).unsqueeze(0).to(device)
 
         # Warm-up dataframe: real data from test_start through gan_seed_end
@@ -199,7 +205,7 @@ def main():
         warmup_with_prev = df_with_inds[
             df_with_inds['Date'] <= config["gan_seed_end"]
         ].tail(len(warmup_df) + 1)[features].copy()
-        warmup_stat_df = make_stationary(warmup_with_prev, price_cols)   # len == len(warmup_df)
+        warmup_stat_df = make_stationary(warmup_with_prev, price_cols, rate_cols)   # len == len(warmup_df)
         scaled_warmup = scaler_gan.transform(warmup_stat_df.values)
 
         # Slide real Feb rows through the window without collecting outputs
@@ -216,16 +222,35 @@ def main():
             start=warmup_df['Date'].iloc[-1] + pd.offsets.BDay(1),
             end=config["forecast_end"], freq='B'
         )
+        
+        # Set seed for reproducible generation
+        torch.manual_seed(42)
+        np.random.seed(42)
+        
         gan_stat_gen = []
         for _ in range(len(free_dates)):
             with torch.no_grad():
-                noise = torch.randn(1, config["gan_window"], config["gan_noise"], device=device)
+                # Apply AGGRESSIVE noise boost and jitter to gold to break high serial correlation (ACF)
+                # Previous 2.0/0.1 was not enough (ACF was still ~0.65). 5.0/0.3 forces daily variety.
+                noise_scale = 5.0 if asset == "gold" else 1.0
+                noise = torch.randn(1, config["gan_window"], config["gan_noise"], device=device) * noise_scale
                 next_stat = netG(win, noise)
-                gan_stat_gen.append(next_stat.cpu().numpy()[0, 0, :])
-                win = torch.cat((win[:, 1:, :], next_stat), dim=1)
+                
+                # Safety: Clip next_stat in scaled space
+                next_stat_clipped = torch.clamp(next_stat, -5.0, 5.0) 
+                
+                # Jitter window more aggressively for gold
+                jitter_scale = 0.3 if asset == "gold" else 0.0
+                jitter = torch.randn_like(next_stat_clipped) * jitter_scale
+                win_update = next_stat_clipped + jitter
+                
+                gan_stat_gen.append(next_stat_clipped.cpu().numpy()[0, 0, :])
+                win = torch.cat((win[:, 1:, :], win_update), dim=1)
 
         gan_stat = scaler_gan.inverse_transform(np.array(gan_stat_gen))
-        gan_stat = np.clip(gan_stat, -0.05, 0.05)  # Safety clip
+        # More conservative physical clip for price stability in long horizons
+        clip_val = 0.025 if asset == "gold" else 0.05
+        gan_stat = np.clip(gan_stat, -clip_val, clip_val) 
 
         # Reconstruct free-gen prices starting from last real warmup price
         last_vals = warmup_df[features].iloc[-1].values.copy()
