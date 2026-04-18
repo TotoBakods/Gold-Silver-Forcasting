@@ -8,6 +8,18 @@ import pandas as pd
 import numpy as np
 import logging
 from fastapi import FastAPI, HTTPException
+from sklearn.metrics import r2_score
+
+# --- Helper to clean NaNs for JSON ---
+def clean_nans(obj):
+    if isinstance(obj, float):
+        if np.isnan(obj) or np.isinf(obj): return None
+        return obj
+    if isinstance(obj, dict):
+        return {k: clean_nans(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [clean_nans(i) for i in obj]
+    return obj
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sklearn.metrics import mean_squared_error, r2_score
@@ -119,7 +131,7 @@ ASSET_CONFIG = {
         "seeds": [42, 123, 99],
         "target_col": "Gold_Futures",
         "dataset_label": "Gold Engine (Hybrid CNN-BiLSTM)",
-        "features": ['Silver_Futures', 'Crude_Oil_Futures', 'UST10Y_Treasury_Yield', 'gepu', 'DFF', 'gpr_daily', 'Gold_Futures'],
+        "features": ['Gold_Futures', 'Silver_Futures', 'Crude_Oil_Futures', 'UST10Y_Treasury_Yield', 'USA_EPU', 'DFF', 'gpr_daily'],
         "tech_cols": ['EMA_Fast', 'EMA_Slow', 'RSI_7', 'MACD_Flash', 'MACD_Signal', 'MACD_Hist', 'BB_Width', 'ROC_2', 'GS_Ratio']
     },
     "silver": {
@@ -315,14 +327,15 @@ def get_status(asset: str):
         # Default to 0.0 if logs are empty (e.g. simulation just started or reset)
         overall_mda, rolling_da = 0.0, 0.0
 
-    return {
+    return clean_nans({
         "current_date": str(st["current_date"]), "forecast_date": str(st["test_df"].iloc[idx]["Date_obj"]),
         "predicted_price": pred_info.get("predicted_price", 0), "council_agreement": pred_info.get("council_agreement", 0),
         "diagnostic_logs": st["diagnostic_logs"], "history_log": history_log, 
         "overall_rmse": rmse, "overall_mae": mae, "overall_r2": r2,
         "overall_mda": overall_mda, "rolling_da": rolling_da,
-        "dataset_mode": st["dataset_mode"], "min_date": str(st["test_df"].iloc[0]["Date_obj"]), "max_date": str(st["test_df"].iloc[-1]["Date_obj"])
-    }
+        "dataset_mode": st["dataset_mode"], "min_date": str(st["test_df"].iloc[0]["Date_obj"]), "max_date": str(st["test_df"].iloc[-1]["Date_obj"]),
+        "test_idx": idx
+    })
 
 @app.post("/api/next_day/{asset}")
 def next_day(asset: str):
