@@ -81,3 +81,33 @@
 2026-04-17 07:53:33,508 - INFO - Synthetic data saved to C:\Users\TotoBakod\Documents\Github\Gold-Silver-Forcasting\gan\gold\reports\synthetic_test_data.csv
 2026-04-17 07:53:33,513 - INFO - Model saved to C:\Users\TotoBakod\Documents\Github\Gold-Silver-Forcasting\gan\gold\gold_val_gen.pth
 2026-04-17 07:53:33,513 - INFO - Calculating metrics on overlapping period...
+2026-04-19 06:47:36,770 - INFO - Starting IMPROVED GAN Training for gold
+2026-04-19 06:47:40,329 - INFO - Epoch 1/2000 | D Loss: 1.9372 | G Loss: 31.4500
+2026-04-19 06:50:37,623 - INFO - Epoch 100/2000 | D Loss: 0.2200 | G Loss: 7.7752
+2026-04-19 06:53:24,445 - INFO - Epoch 200/2000 | D Loss: 0.0783 | G Loss: 6.7703
+2026-04-19 06:56:17,996 - INFO - Epoch 300/2000 | D Loss: 0.1560 | G Loss: 5.5314
+2026-04-19 06:59:10,577 - INFO - Epoch 400/2000 | D Loss: 0.0334 | G Loss: 299.9135
+2026-04-19 07:02:03,542 - INFO - Epoch 500/2000 | D Loss: 0.0851 | G Loss: 26.4619
+2026-04-19 07:04:56,578 - INFO - Epoch 600/2000 | D Loss: 0.0000 | G Loss: 5.5869
+2026-04-19 07:07:50,322 - INFO - Epoch 700/2000 | D Loss: 0.1026 | G Loss: 12.4735
+2026-04-19 07:10:43,431 - INFO - Epoch 800/2000 | D Loss: 0.1565 | G Loss: 7.1618
+2026-04-19 07:13:36,971 - INFO - Epoch 900/2000 | D Loss: 0.1626 | G Loss: 20.6918
+2026-04-19 07:16:30,939 - INFO - Epoch 1000/2000 | D Loss: 0.0317 | G Loss: 13.4868
+2026-04-19 07:19:24,924 - INFO - Epoch 1100/2000 | D Loss: 0.0697 | G Loss: 12.4216
+2026-04-19 07:22:18,219 - INFO - Epoch 1200/2000 | D Loss: 0.0695 | G Loss: 6.4182
+2026-04-19 07:25:11,540 - INFO - Epoch 1300/2000 | D Loss: 0.1714 | G Loss: 5.9714
+2026-04-19 07:28:05,063 - INFO - Epoch 1400/2000 | D Loss: 0.1442 | G Loss: 6.9058
+2026-04-19 07:30:58,941 - INFO - Epoch 1500/2000 | D Loss: 0.2078 | G Loss: 7.2319
+2026-04-19 07:33:51,625 - INFO - Epoch 1600/2000 | D Loss: 0.4663 | G Loss: 17.8868
+2026-04-19 07:36:41,237 - INFO - Epoch 1700/2000 | D Loss: 0.2765 | G Loss: 8.2153
+2026-04-19 07:39:30,685 - INFO - Epoch 1800/2000 | D Loss: 0.3147 | G Loss: 233.6667
+2026-04-19 07:42:20,014 - INFO - Epoch 1900/2000 | D Loss: 0.2180 | G Loss: 9.1170
+2026-04-19 07:45:09,751 - INFO - Epoch 2000/2000 | D Loss: 0.2268 | G Loss: 214.8629
+2026-04-19 07:45:09,751 - INFO - Generating synthetic data for validation period...
+2026-04-19 07:45:09,842 - INFO - Synthetic data saved to C:\Users\TotoBakod\Documents\Github\Gold-Silver-Forcasting\gan\gold\reports\synthetic_test_data.csv
+2026-04-19 07:45:09,845 - INFO - Model saved to C:\Users\TotoBakod\Documents\Github\Gold-Silver-Forcasting\gan\gold\gold_val_gen.pth
+2026-04-19 07:45:09,845 - INFO - Calculating metrics on overlapping period...
+2026-04-19 12:19:06,145 - INFO - Starting IMPROVED GAN Training for gold
+2026-04-19 12:19:09,609 - INFO - Epoch 1/2000 | D Loss: 1.8803 | G Loss: 16.2883
+2026-04-19 12:22:20,164 - INFO - Epoch 100/2000 | D Loss: 0.1284 | G Loss: 9.1202
+2026-04-19 12:25:43,603 - INFO - Epoch 200/2000 | D Loss: 0.0454 | G Loss: 202.8049

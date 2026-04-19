@@ -17,7 +17,7 @@ ASSET_CONFIGS = {
         "raw_csv": "df_gold_dataset_USA_EPU_APRIL_01_2015_to_APRIL_14_2026.csv",
         "train_end": "2026-01-31",
         "test_start": "2026-02-01",
-        "gan_seed_end": "2026-02-28",  # Matches gan/gold training cutoff — closer regime to test period
+        "gan_seed_end": "2026-01-31",  # Matches new strict out-of-sample boundary
         "data_end": "2026-04-13",
         "forecast_end": "2026-05-31",
         "model_dir": "models/gold_RRL_interpolate",
@@ -40,7 +40,7 @@ ASSET_CONFIGS = {
         "raw_csv": "df_silver_dataset_APRIL_01_2015_to_APRIL_14_2026.csv",
         "train_end": "2026-01-31",
         "test_start": "2026-02-01",
-        "gan_seed_end": "2026-02-28",  # Matches gan/silver training cutoff — closer regime to test period
+        "gan_seed_end": "2026-01-31",  # Matches new strict out-of-sample boundary
         "data_end": "2026-04-13",
         "forecast_end": "2026-05-31",
         "model_dir": "models/silver_RRL_interpolate",
@@ -201,25 +201,33 @@ def main():
             (df_with_inds['Date'] <= config["gan_seed_end"])
         ].reset_index(drop=True)
 
-        # Build stationary returns for the warm-up period (need one row before for diff)
-        warmup_with_prev = df_with_inds[
-            df_with_inds['Date'] <= config["gan_seed_end"]
-        ].tail(len(warmup_df) + 1)[features].copy()
-        warmup_stat_df = make_stationary(warmup_with_prev, price_cols, rate_cols)   # len == len(warmup_df)
-        scaled_warmup = scaler_gan.transform(warmup_stat_df.values)
+        if len(warmup_df) > 0:
+            # Build stationary returns for the warm-up period
+            warmup_with_prev = df_with_inds[
+                df_with_inds['Date'] <= config["gan_seed_end"]
+            ].tail(len(warmup_df) + 1)[features].copy()
+            warmup_stat_df = make_stationary(warmup_with_prev, price_cols, rate_cols)
+            scaled_warmup = scaler_gan.transform(warmup_stat_df.values)
 
-        # Slide real Feb rows through the window without collecting outputs
-        for step_row in scaled_warmup:
-            real_step = torch.FloatTensor(step_row).reshape(1, 1, -1).to(device)
-            win = torch.cat((win[:, 1:, :], real_step), dim=1)
+            # Slide real rows through the window without collecting outputs
+            for step_row in scaled_warmup:
+                real_step = torch.FloatTensor(step_row).reshape(1, 1, -1).to(device)
+                win = torch.cat((win[:, 1:, :], real_step), dim=1)
 
-        # Reconstruct warmup prices directly from real data
-        warmup_prices = warmup_df[features].values.tolist()
-        warmup_dates  = warmup_df['Date'].values
+            warmup_prices = warmup_df[features].values.tolist()
+            warmup_dates  = warmup_df['Date'].values
+            
+            # Start free generation after warmup
+            free_start_date = warmup_df['Date'].iloc[-1] + pd.offsets.BDay(1)
+        else:
+            warmup_prices = []
+            warmup_dates = []
+            # Start free generation immediately on test_start
+            free_start_date = pd.to_datetime(config["test_start"])
 
-        # --- Phase 2: free generation from Mar 1 → forecast_end ---
+        # --- Phase 2: free generation ---
         free_dates = pd.date_range(
-            start=warmup_df['Date'].iloc[-1] + pd.offsets.BDay(1),
+            start=free_start_date,
             end=config["forecast_end"], freq='B'
         )
         
@@ -252,8 +260,12 @@ def main():
         clip_val = 0.025 if asset == "gold" else 0.05
         gan_stat = np.clip(gan_stat, -clip_val, clip_val) 
 
-        # Reconstruct free-gen prices starting from last real warmup price
-        last_vals = warmup_df[features].iloc[-1].values.copy()
+        # Reconstruct free-gen prices starting from last known price
+        if len(warmup_df) > 0:
+            last_vals = warmup_df[features].iloc[-1].values.copy()
+        else:
+            last_vals = train_df[features].iloc[-1].values.copy()
+            
         free_prices = []
         for row in gan_stat:
             for i, col in enumerate(features):

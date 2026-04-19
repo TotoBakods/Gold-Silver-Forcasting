@@ -58,6 +58,22 @@ class CNN_BiLSTM(nn.Module):
         x = self.relu(x)
         return self.out(x)
 
+class GANSelfAttention(nn.Module):
+    def __init__(self, hidden_dim):
+        super().__init__()
+        self.query = nn.Linear(hidden_dim, hidden_dim)
+        self.key   = nn.Linear(hidden_dim, hidden_dim)
+        self.value = nn.Linear(hidden_dim, hidden_dim)
+        self.scale = np.sqrt(hidden_dim)
+
+    def forward(self, x):
+        q = self.query(x)
+        k = self.key(x)
+        v = self.value(x)
+        attn = torch.matmul(q, k.transpose(-2, -1)) / self.scale
+        attn = torch.softmax(attn, dim=-1)
+        return torch.matmul(attn, v)
+
 class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, padding=1, dilation=1):
         super().__init__()
@@ -69,26 +85,23 @@ class ConvBlock(nn.Module):
     def forward(self, x): return self.block(x)
 
 class Generator(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size, noise_dim=64, dropout=0.1):
+    def __init__(self, input_size, hidden_size, output_size, noise_dim=64):
         super().__init__()
-        self.noise_dim = noise_dim
         channels = input_size + noise_dim
         self.backbone = nn.Sequential(
             ConvBlock(channels, hidden_size, dilation=1),
             ConvBlock(hidden_size, hidden_size, dilation=2),
             ConvBlock(hidden_size, hidden_size, dilation=4),
-            nn.Conv1d(hidden_size, hidden_size, kernel_size=1),
-            nn.GELU(),
         )
+        self.attention = GANSelfAttention(hidden_size)
         self.head = nn.Sequential(
             nn.Linear(hidden_size, hidden_size),
             nn.GELU(),
-            nn.Dropout(dropout),
             nn.Linear(hidden_size, output_size),
         )
     def forward(self, history, noise):
-        # history: (B, Seq, Features), noise: (B, Seq, Noise)
         x = torch.cat((history, noise), dim=2).transpose(1, 2)
-        hidden = self.backbone(x).transpose(1, 2)
-        generated = self.head(hidden[:, -1, :])
+        x = self.backbone(x).transpose(1, 2)
+        x = self.attention(x)
+        generated = self.head(x[:, -1, :])
         return generated.unsqueeze(1)
